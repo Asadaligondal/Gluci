@@ -1,0 +1,78 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                   String    @id @default(cuid())
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+  email                String?   @unique
+  passwordHash         String?
+  appToken             String?   @unique
+  telegramChatId       String?   @unique
+  whatsappWaId         String?   @unique
+  freeChecksUsed       Int       @default(0)
+  subscriptionStatus   String    @default("free")
+  reengagementOptOut   Boolean   @default(false)
+  lastReengagementAt   DateTime?
+  profile              Profile?
+  messages             Message[]
+  usageEvents          UsageEvent[]
+  conversations        Conversation[]
+}
+
+model Conversation {
+  id                 String   @id @default(cuid())
+  userId             String
+  user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title              String   @default("New chat")
+  /// "telegram" | "whatsapp" for the single thread per user per channel; null = app-originated chats
+  messagingChannel   String?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+  messages           Message[]
+
+  @@index([userId])
+  @@unique([userId, messagingChannel])
+}
+
+model Profile {
+  id          String   @id @default(cuid())
+  userId      String   @unique
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  goal        String?
+  dietaryJson String?  // JSON string: preferences, allergies
+  memoryJson  String?  // JSON string: structured memory for LLM
+}
+
+model Message {
+  id              String   @id @default(cuid())
+  userId          String
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// Legacy rows may be null before backfill; new writes always set this
+  conversationId  String?
+  conversation    Conversation? @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  role            String
+  content         String   @db.Text
+  imageUrl        String?
+  metadata        String?  // JSON
+  createdAt       DateTime @default(now())
+
+  @@index([conversationId])
+  @@index([userId, conversationId])
+}
+
+model UsageEvent {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      String
+  score     Float?
+  verdict   String?
+  createdAt DateTime @default(now())
+}
