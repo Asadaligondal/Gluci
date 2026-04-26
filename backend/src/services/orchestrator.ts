@@ -39,11 +39,44 @@ export async function handleChatTurn(params: {
   if (!conv) throw new Error("Conversation not found");
 
   if (!canUseFreeCheck(user, cfg.FREE_DECISIONS_LIMIT)) {
-    const msg = `You've used your free food decisions. Subscribe to keep going with Gluci.`;
+    const msg = `You've used your ${cfg.FREE_DECISIONS_LIMIT} free food decisions. Subscribe to keep going with Gluci.`;
+    let checkoutUrl: string | undefined;
+    if (cfg.STRIPE_SECRET_KEY && cfg.STRIPE_PRICE_ID && params.channel !== "app") {
+      try {
+        const Stripe = (await import("stripe")).default;
+        const stripe = new Stripe(cfg.STRIPE_SECRET_KEY);
+        let customerId = user.stripeCustomerId ?? undefined;
+        if (!customerId) {
+          const customer = await stripe.customers.create({
+            email: user.email ?? undefined,
+            metadata: { userId: user.id },
+          });
+          customerId = customer.id;
+          await prisma.user.update({
+            where: { id: user.id },
+            data: { stripeCustomerId: customer.id },
+          });
+        }
+        const session = await stripe.checkout.sessions.create({
+          mode: "subscription",
+          line_items: [{ price: cfg.STRIPE_PRICE_ID, quantity: 1 }],
+          customer: customerId,
+          success_url: `${cfg.PUBLIC_BASE_URL}/v1/billing/success?session_id={CHECKOUT_SESSION_ID}`,
+          cancel_url: `${cfg.PUBLIC_BASE_URL}/v1/billing/cancel`,
+          client_reference_id: user.id,
+          metadata: { userId: user.id, channel: params.channel },
+          allow_promotion_codes: true,
+        });
+        checkoutUrl = session.url ?? undefined;
+      } catch (e) {
+        console.warn("paywall checkout creation failed", e);
+      }
+    }
+    const replyWithLink = checkoutUrl ? `${msg}\n\nUpgrade here: ${checkoutUrl}` : msg;
     return {
-      reply: msg,
+      reply: replyWithLink,
       structured: {
-        userReply: msg,
+        userReply: replyWithLink,
         glucoseGalScore: 0,
         verdict: "Subscribe",
         intent: "general",
@@ -52,7 +85,7 @@ export async function handleChatTurn(params: {
       },
       paywall: {
         message: msg,
-        checkoutUrl: undefined,
+        checkoutUrl,
       },
     };
   }

@@ -18,6 +18,11 @@ model User {
   whatsappWaId         String?   @unique
   freeChecksUsed       Int       @default(0)
   subscriptionStatus   String    @default("free")
+  stripeCustomerId     String?   @unique
+  stripeSubscriptionId String?   @unique
+  subscriptionPriceId  String?
+  subscriptionCurrentPeriodEnd DateTime?
+  subscriptionCancelAtPeriodEnd Boolean @default(false)
   reengagementOptOut   Boolean   @default(false)
   lastReengagementAt   DateTime?
   profile              Profile?
