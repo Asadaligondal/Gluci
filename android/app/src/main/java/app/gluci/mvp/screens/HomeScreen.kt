@@ -22,6 +22,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -39,6 +40,7 @@ fun HomeScreen(
 ) {
     val convs by vm.conversations.collectAsState()
     val usage by vm.usage.collectAsState()
+    val billing by vm.billing.collectAsState()
     val err by vm.error.collectAsState()
 
     Scaffold(
@@ -47,12 +49,20 @@ fun HomeScreen(
                 title = {
                     Column {
                         Text("Gluci", style = MaterialTheme.typography.titleLarge)
-                        usage?.let { (used, limit) ->
-                            Text("Free checks $used / $limit", style = MaterialTheme.typography.labelSmall)
+                        val isActive = billing?.subscriptionStatus == "active"
+                        when {
+                            isActive -> Text("Pro", style = MaterialTheme.typography.labelSmall)
+                            else -> usage?.let { (used, limit) ->
+                                Text("Free checks $used / $limit", style = MaterialTheme.typography.labelSmall)
+                            }
                         }
                     }
                 },
                 actions = {
+                    val isActive = billing?.subscriptionStatus == "active"
+                    if (!isActive && billing?.stripeConfigured == true) {
+                        TextButton(onClick = { vm.showPaywallSheet() }) { Text("Upgrade") }
+                    }
                     IconButton(
                         onClick = {
                             vm.createConversation { id ->

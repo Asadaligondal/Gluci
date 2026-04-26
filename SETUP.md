@@ -141,11 +141,64 @@ High level (exact UI changes over time; follow Meta’s current docs):
 
 ---
 
-## 6. Stripe (optional)
+## 6. Stripe (paywall)
 
-1. Create a product + recurring **Price** in [Stripe Dashboard](https://dashboard.stripe.com/).
-2. Set **`STRIPE_SECRET_KEY`**, **`STRIPE_PRICE_ID`**, and **`STRIPE_WEBHOOK_SECRET`** (webhook endpoint: `https://YOUR_API/webhooks/stripe`, events e.g. `checkout.session.completed`).
-3. The app exposes **`POST /v1/billing/checkout`** (Bearer token) returning a Checkout URL for the logged-in user.
+The MVP supports a free-tier limit + recurring subscription via Stripe. The backend creates checkout sessions, manages a customer, listens to webhooks, and exposes a billing portal. The Android app opens checkout in the system browser and refreshes status when it returns.
+
+### 6.1 What you need from Stripe
+
+| Variable | Where in Stripe |
+|----------|-----------------|
+| **`STRIPE_SECRET_KEY`** | Dashboard → **Developers → API keys** → "Secret key" (`sk_test_...` for test mode, `sk_live_...` for live). |
+| **`STRIPE_PRICE_ID`**   | Dashboard → **Products → + Add product** → set name/price → choose **Recurring** (monthly/yearly) → save → open the product → copy the **Price ID** (starts with `price_...`). |
+| **`STRIPE_WEBHOOK_SECRET`** | Dashboard → **Developers → Webhooks → + Add endpoint** → URL `{PUBLIC_BASE_URL}/webhooks/stripe`. Events to send: `checkout.session.completed`, `customer.subscription.created`, `customer.subscription.updated`, `customer.subscription.deleted`, `invoice.payment_failed`. After saving, click **Reveal** under "Signing secret" and copy `whsec_...`. |
+
+For Render, paste those 3 values into **Environment** (alongside `DATABASE_URL`, `OPENAI_API_KEY`, `JWT_SECRET`, `PUBLIC_BASE_URL`, `TELEGRAM_BOT_TOKEN`). For local dev, paste them into `backend/.env`.
+
+> **Customer Portal:** before live mode, also enable it in **Stripe Dashboard → Settings → Billing → Customer portal** (one-time toggle). Test mode usually works out of the box.
+
+### 6.2 Local testing with Stripe CLI
+
+If you want to test webhooks locally (without Render), use the [Stripe CLI](https://stripe.com/docs/stripe-cli):
+
+```powershell
+stripe login
+stripe listen --forward-to http://localhost:3000/webhooks/stripe
+```
+
+Use the `whsec_...` it prints as your local **`STRIPE_WEBHOOK_SECRET`**. Then in another terminal:
+
+```powershell
+stripe trigger checkout.session.completed
+stripe trigger customer.subscription.updated
+```
+
+### 6.3 API surface
+
+| Method | Path | Notes |
+|--------|------|-------|
+| POST | `/v1/billing/checkout` | Bearer; returns `{ url }` to a Stripe Checkout session. |
+| POST | `/v1/billing/portal`   | Bearer; returns `{ url }` to the Stripe Customer Portal (manage / cancel). |
+| GET  | `/v1/billing/status`   | Bearer; `{ subscriptionStatus, freeChecksUsed, freeLimit, currentPeriodEnd, cancelAtPeriodEnd, stripeConfigured }`. |
+| POST | `/webhooks/stripe`     | Stripe → server. Signed with `STRIPE_WEBHOOK_SECRET`. |
+
+### 6.4 Android UX (built-in)
+
+- **Home top-bar** shows "Free checks X / Y" or "Pro" once active. An **Upgrade** action opens a paywall sheet.
+- **Settings (Profile)** shows status + period end + **Upgrade** or **Manage subscription** (opens Stripe Customer Portal in a browser).
+- When the backend returns `paywall.checkoutUrl` in a chat reply (free limit hit), the app shows the **paywall bottom sheet** automatically with a "Continue to checkout" button.
+- After returning from the browser, the app **auto-refreshes billing status** (Activity onResume).
+
+### 6.5 Verify end-to-end
+
+1. **Backend health:** `GET {PUBLIC_BASE_URL}/health` → `{ "ok": true }`.
+2. **Subscription off:** sign in on Android → open **Settings** → status reads `free`. The Home top bar shows free checks count.
+3. **Checkout from app:** tap **Upgrade** → Stripe Checkout page opens in the browser. In **test mode**, use card `4242 4242 4242 4242`, any future expiry, any CVC, any ZIP.
+4. **Webhook fires:** in **Stripe Dashboard → Developers → Webhooks → your endpoint** you should see `checkout.session.completed` and `customer.subscription.created` events with **200 OK**. Render logs show `gluci-backend` 200 on `/webhooks/stripe`.
+5. **Status updates:** return to the app — Settings now shows `active` and a period end date; Home shows **Pro**.
+6. **Paywall flow:** in **Stripe Dashboard → Customers**, find the user and **cancel** the test subscription, **or** call the **Manage subscription** button → cancel. Webhook updates `subscriptionStatus`. After it expires, `freeChecksUsed >= FREE_DECISIONS_LIMIT` triggers the paywall on next chat → bottom sheet appears with the checkout URL embedded in the assistant reply (also pushed via `paywall.checkoutUrl` for Telegram/WhatsApp).
+7. **Telegram:** when a Telegram user hits the free limit, they get the same upgrade message with the **Stripe Checkout URL** inline. Clicking it in Telegram opens the browser, completes payment, and the next message is unblocked.
+8. **Force re-check:** `GET /v1/billing/status` with the user's Bearer token from a tool like `curl` should match what the app shows.
 
 ---
 
@@ -174,7 +227,9 @@ Processes up to 100 users (Telegram messages if `TELEGRAM_BOT_TOKEN` is set). Sc
 | PATCH | `/v1/profile/` | Bearer |
 | GET | `/v1/summary/daily` | Bearer |
 | GET | `/v1/summary/usage` | Bearer |
+| GET | `/v1/billing/status` | Bearer (Stripe) |
 | POST | `/v1/billing/checkout` | Bearer (Stripe) |
+| POST | `/v1/billing/portal` | Bearer (Stripe) |
 
 Share cards are served under **`GET /static/cards/...`** when the model suggests a share card.
 

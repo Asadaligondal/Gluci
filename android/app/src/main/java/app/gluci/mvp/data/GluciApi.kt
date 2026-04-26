@@ -94,6 +94,22 @@ data class UsageResponse(
     @SerializedName("subscriptionStatus") val subscriptionStatus: String,
 )
 
+data class BillingStatusResponse(
+    @SerializedName("subscriptionStatus") val subscriptionStatus: String,
+    @SerializedName("freeChecksUsed") val freeChecksUsed: Int,
+    @SerializedName("freeLimit") val freeLimit: Int,
+    @SerializedName("cancelAtPeriodEnd") val cancelAtPeriodEnd: Boolean? = null,
+    @SerializedName("currentPeriodEnd") val currentPeriodEnd: String? = null,
+    @SerializedName("stripeConfigured") val stripeConfigured: Boolean = false,
+)
+
+data class CheckoutResponse(
+    val url: String?,
+    @SerializedName("sessionId") val sessionId: String? = null,
+)
+
+data class PortalResponse(val url: String?)
+
 interface GluciApi {
     @POST("v1/auth/register")
     suspend fun register(): RegisterResponse
@@ -143,4 +159,19 @@ interface GluciApi {
     suspend fun usage(
         @Header("Authorization") authorization: String,
     ): UsageResponse
+
+    @GET("v1/billing/status")
+    suspend fun billingStatus(
+        @Header("Authorization") authorization: String,
+    ): BillingStatusResponse
+
+    @POST("v1/billing/checkout")
+    suspend fun checkout(
+        @Header("Authorization") authorization: String,
+    ): CheckoutResponse
+
+    @POST("v1/billing/portal")
+    suspend fun billingPortal(
+        @Header("Authorization") authorization: String,
+    ): PortalResponse
 }

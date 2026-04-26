@@ -7,6 +7,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import app.gluci.mvp.data.ApiModule
 import app.gluci.mvp.data.AuthRequest
+import app.gluci.mvp.data.BillingStatusResponse
 import app.gluci.mvp.data.ChatRequest
 import app.gluci.mvp.data.CreateConversationRequest
 import app.gluci.mvp.data.ConversationDto
@@ -48,6 +49,15 @@ class GluciViewModel(app: Application) : AndroidViewModel(app) {
     private val _error = MutableStateFlow<String?>(null)
     val error: StateFlow<String?> = _error.asStateFlow()
 
+    private val _billing = MutableStateFlow<BillingStatusResponse?>(null)
+    val billing: StateFlow<BillingStatusResponse?> = _billing.asStateFlow()
+
+    private val _paywallUrl = MutableStateFlow<String?>(null)
+    val paywallUrl: StateFlow<String?> = _paywallUrl.asStateFlow()
+
+    private val _showPaywall = MutableStateFlow(false)
+    val showPaywall: StateFlow<Boolean> = _showPaywall.asStateFlow()
+
     var pendingFirstMessage: String? = null
 
     init {
@@ -63,8 +73,65 @@ class GluciViewModel(app: Application) : AndroidViewModel(app) {
             if (store.token.first() != null) {
                 refreshConversations()
                 refreshUsage()
+                refreshBilling()
             }
         }
+    }
+
+    fun refreshBilling() {
+        val t = _token.value ?: return
+        viewModelScope.launch {
+            try {
+                _billing.value = api.billingStatus("Bearer $t")
+            } catch (_: Exception) { /* ignore */ }
+        }
+    }
+
+    fun startCheckout(onUrl: (String) -> Unit) {
+        val t = _token.value ?: return
+        viewModelScope.launch {
+            _busy.value = true
+            _error.value = null
+            try {
+                val r = api.checkout("Bearer $t")
+                val url = r.url
+                if (url != null) {
+                    _paywallUrl.value = url
+                    onUrl(url)
+                } else {
+                    _error.value = "Could not start checkout"
+                }
+            } catch (e: Exception) {
+                _error.value = e.message ?: "Checkout failed"
+            } finally {
+                _busy.value = false
+            }
+        }
+    }
+
+    fun openBillingPortal(onUrl: (String) -> Unit) {
+        val t = _token.value ?: return
+        viewModelScope.launch {
+            _busy.value = true
+            _error.value = null
+            try {
+                val r = api.billingPortal("Bearer $t")
+                val url = r.url
+                if (url != null) onUrl(url) else _error.value = "Could not open billing portal"
+            } catch (e: Exception) {
+                _error.value = e.message ?: "Billing portal failed"
+            } finally {
+                _busy.value = false
+            }
+        }
+    }
+
+    fun dismissPaywall() {
+        _showPaywall.value = false
+    }
+
+    fun showPaywallSheet() {
+        _showPaywall.value = true
     }
 
     fun refreshConversations() {
@@ -213,8 +280,10 @@ class GluciViewModel(app: Application) : AndroidViewModel(app) {
                     ChatRequest(conversationId = conv, text = text.trim()),
                 )
                 appendLocalTurn(text.trim(), out.reply)
+                handlePaywall(out.paywall?.checkoutUrl)
                 refreshConversations()
                 refreshUsage()
+                refreshBilling()
             } catch (e: Exception) {
                 _error.value = e.message ?: "Chat failed"
             } finally {
@@ -241,8 +310,10 @@ class GluciViewModel(app: Application) : AndroidViewModel(app) {
                     ),
                 )
                 appendLocalTurn(caption ?: "(photo)", out.reply)
+                handlePaywall(out.paywall?.checkoutUrl)
                 refreshConversations()
                 refreshUsage()
+                refreshBilling()
             } catch (e: Exception) {
                 _error.value = e.message ?: "Upload failed"
             } finally {
@@ -267,13 +338,22 @@ class GluciViewModel(app: Application) : AndroidViewModel(app) {
                     ChatRequest(conversationId = conv, text = text, barcode = code),
                 )
                 appendLocalTurn(text, out.reply)
+                handlePaywall(out.paywall?.checkoutUrl)
                 refreshConversations()
                 refreshUsage()
+                refreshBilling()
             } catch (e: Exception) {
                 _error.value = e.message ?: "Chat failed"
             } finally {
                 _busy.value = false
             }
+        }
+    }
+
+    private fun handlePaywall(url: String?) {
+        if (url != null) {
+            _paywallUrl.value = url
+            _showPaywall.value = true
         }
     }
 

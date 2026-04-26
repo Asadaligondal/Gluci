@@ -19,6 +19,7 @@ import androidx.navigation.navArgument
 import app.gluci.mvp.screens.BarcodeScreen
 import app.gluci.mvp.screens.ChatScreen
 import app.gluci.mvp.screens.HomeScreen
+import app.gluci.mvp.screens.PaywallSheet
 import app.gluci.mvp.screens.ProfileScreen
 import app.gluci.mvp.screens.SignInScreen
 import app.gluci.mvp.screens.SignUpScreen
@@ -27,12 +28,21 @@ import app.gluci.mvp.ui.theme.GluciTheme
 import app.gluci.mvp.vm.GluciViewModel
 
 class MainActivity : ComponentActivity() {
+    private var sessionVm: GluciViewModel? = null
+
+    override fun onResume() {
+        super.onResume()
+        sessionVm?.refreshBilling()
+        sessionVm?.refreshUsage()
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent {
             val nav = rememberNavController()
             val vm: GluciViewModel = viewModel()
+            sessionVm = vm
             GluciTheme {
                 NavHost(navController = nav, startDestination = "splash") {
                     composable("splash") {
@@ -66,6 +76,7 @@ class MainActivity : ComponentActivity() {
                     composable("profile") { ProfileScreen(vm, nav) }
                     composable("barcode") { BarcodeScreen(vm, nav) }
                 }
+                PaywallSheet(vm)
             }
         }
     }
