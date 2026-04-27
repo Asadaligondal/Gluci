@@ -30,6 +30,7 @@ data class UiMessage(
     val score: Double? = null,
     val verdict: String? = null,
     val intent: String? = null,
+    val shareCardUrl: String? = null,
     val createdAtMs: Long? = null,
 )
 
@@ -301,7 +302,16 @@ class GluciViewModel(app: Application) : AndroidViewModel(app) {
             try {
                 val t = _token.value!!
                 val h = api.history("Bearer $t", id)
-                _messages.value = h.messages.map { UiMessage(role = it.role, content = it.content) }
+                _messages.value = h.messages.map {
+                    UiMessage(
+                        role = it.role,
+                        content = it.content,
+                        score = it.score,
+                        verdict = it.verdict,
+                        intent = it.intent,
+                        shareCardUrl = it.shareCardUrl,
+                    )
+                }
                 onReady()
                 val p = pendingFirstMessage
                 if (p != null) {
@@ -352,6 +362,7 @@ class GluciViewModel(app: Application) : AndroidViewModel(app) {
                     score = out.score,
                     verdict = out.verdict,
                     intent = out.intent,
+                    shareCardUrl = out.shareCardUrl,
                 )
                 handlePaywall(out.paywall?.checkoutUrl)
                 refreshConversations()
@@ -389,6 +400,7 @@ class GluciViewModel(app: Application) : AndroidViewModel(app) {
                     score = out.score,
                     verdict = out.verdict,
                     intent = out.intent,
+                    shareCardUrl = out.shareCardUrl,
                 )
                 handlePaywall(out.paywall?.checkoutUrl)
                 refreshConversations()
@@ -424,6 +436,7 @@ class GluciViewModel(app: Application) : AndroidViewModel(app) {
                     score = out.score,
                     verdict = out.verdict,
                     intent = out.intent,
+                    shareCardUrl = out.shareCardUrl,
                 )
                 handlePaywall(out.paywall?.checkoutUrl)
                 refreshConversations()
@@ -463,6 +476,7 @@ class GluciViewModel(app: Application) : AndroidViewModel(app) {
         score: Double? = null,
         verdict: String? = null,
         intent: String? = null,
+        shareCardUrl: String? = null,
     ) {
         val now = System.currentTimeMillis()
         val cur = _messages.value.toMutableList()
@@ -474,6 +488,7 @@ class GluciViewModel(app: Application) : AndroidViewModel(app) {
                 score = score,
                 verdict = verdict,
                 intent = intent,
+                shareCardUrl = shareCardUrl,
                 createdAtMs = now,
             ),
         )

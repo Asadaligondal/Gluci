@@ -145,8 +145,7 @@ export async function handleChatTurn(params: {
     shareCardUrl = card.relativeUrl;
   }
 
-  let finalReply = structured.userReply;
-  if (shareCardUrl) finalReply += `\n\nHere's your share card: ${shareCardUrl}`;
+  const finalReply = structured.userReply;
 
   await prisma.message.create({
     data: {
@@ -158,6 +157,7 @@ export async function handleChatTurn(params: {
         score: structured.glucoseGalScore,
         verdict: structured.verdict,
         intent: structured.intent,
+        shareCardUrl,
       }),
     },
   });

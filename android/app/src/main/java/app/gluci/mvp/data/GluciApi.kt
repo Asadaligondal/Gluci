@@ -82,6 +82,10 @@ data class HistoryMessage(
     val id: String,
     val role: String,
     val content: String,
+    val score: Double? = null,
+    val verdict: String? = null,
+    val intent: String? = null,
+    val shareCardUrl: String? = null,
 )
 
 data class ProfilePatch(

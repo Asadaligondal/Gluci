@@ -18,11 +18,37 @@ historyRouter.get("/", async (req: AuthedRequest, res) => {
     take: 100,
   });
   res.json({
-    messages: rows.map((m) => ({
-      id: m.id,
-      role: m.role,
-      content: m.content,
-      createdAt: m.createdAt,
-    })),
+    messages: rows.map((m) => {
+      let score: number | null = null;
+      let verdict: string | null = null;
+      let intent: string | null = null;
+      let shareCardUrl: string | null = null;
+      if (m.metadata) {
+        try {
+          const meta = JSON.parse(m.metadata) as {
+            score?: number | null;
+            verdict?: string | null;
+            intent?: string | null;
+            shareCardUrl?: string | null;
+          };
+          if (typeof meta.score === "number") score = meta.score;
+          if (typeof meta.verdict === "string") verdict = meta.verdict;
+          if (typeof meta.intent === "string") intent = meta.intent;
+          if (typeof meta.shareCardUrl === "string") shareCardUrl = meta.shareCardUrl;
+        } catch {
+          /* ignore malformed metadata */
+        }
+      }
+      return {
+        id: m.id,
+        role: m.role,
+        content: m.content,
+        createdAt: m.createdAt,
+        score,
+        verdict,
+        intent,
+        shareCardUrl,
+      };
+    }),
   });
 });

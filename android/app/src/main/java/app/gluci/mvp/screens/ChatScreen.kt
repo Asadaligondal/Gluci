@@ -94,6 +94,7 @@ fun ChatScreen(
     val err by vm.error.collectAsState()
     var input by remember { mutableStateOf("") }
     val listState = rememberLazyListState()
+    var sharedCard by remember { mutableStateOf<Pair<String, String>?>(null) }
 
     LaunchedEffect(conversationId) {
         vm.openConversation(conversationId) { }
@@ -164,7 +165,20 @@ fun ChatScreen(
                     count = messages.size,
                     key = { i -> "m-$i-${messages[i].content.hashCode()}" },
                 ) { i ->
-                    ChatMessageBubble(messages[i])
+                    ChatMessageBubble(
+                        m = messages[i],
+                        onShareCardClick = { url ->
+                            val msg = messages[i]
+                            val score = msg.score?.let { String.format("%.1f/10", it) }
+                            val verdict = msg.verdict?.takeIf { it.isNotBlank() }
+                            val caption = buildString {
+                                append("My Gluci food check")
+                                if (verdict != null) append(" — $verdict")
+                                if (score != null) append(" ($score)")
+                            }
+                            sharedCard = url to caption
+                        },
+                    )
                 }
                 if (busy) {
                     item {
@@ -225,6 +239,13 @@ fun ChatScreen(
                 )
             }
             }
+        }
+        sharedCard?.let { (url, caption) ->
+            ShareCardSheet(
+                url = url,
+                captionText = caption,
+                onDismiss = { sharedCard = null },
+            )
         }
     }
 }
@@ -345,7 +366,10 @@ private fun WelcomeHero() {
 }
 
 @Composable
-private fun ChatMessageBubble(m: UiMessage) {
+private fun ChatMessageBubble(
+    m: UiMessage,
+    onShareCardClick: (String) -> Unit = {},
+) {
     val isUser = m.role == "user"
     val time = GluciViewModel.formatMessageTime(m.createdAtMs)
     Column(
@@ -375,7 +399,11 @@ private fun ChatMessageBubble(m: UiMessage) {
                 .shadow(2.dp, RoundedCornerShape(16.dp)),
         ) {
             Column(Modifier.padding(20.dp)) {
-                if (!isUser && m.verdict != null) {
+                val showInsight = !isUser &&
+                    !m.verdict.isNullOrBlank() &&
+                    !m.verdict.equals("general", ignoreCase = true) &&
+                    !m.intent.equals("general", ignoreCase = true)
+                if (showInsight) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier.padding(bottom = 12.dp),
@@ -410,8 +438,14 @@ private fun ChatMessageBubble(m: UiMessage) {
                     color = if (isUser) UserBubbleText else MaterialTheme.colorScheme.onSurface,
                     lineHeight = 24.sp,
                 )
-                if (!isUser && (m.score != null || m.verdict != null)) {
+                if (showInsight) {
                     InsightStrip(m)
+                }
+                if (!isUser && !m.shareCardUrl.isNullOrBlank()) {
+                    ShareCardPreview(
+                        url = m.shareCardUrl,
+                        onClick = { onShareCardClick(m.shareCardUrl) },
+                    )
                 }
             }
         }
@@ -428,34 +462,26 @@ private fun ChatMessageBubble(m: UiMessage) {
 @Composable
 private fun InsightStrip(m: UiMessage) {
     val scoreStr = m.score?.let { String.format("%.1f/10", it) } ?: "—"
-    val verdictShort = m.verdict ?: "—"
-    val intentLabel = m.intent?.takeIf { it.isNotEmpty() }?.let { s ->
-        s[0].uppercaseChar() + s.drop(1)
-    } ?: "—"
+    val verdictShort = m.verdict?.takeIf { it.isNotBlank() } ?: "—"
     Surface(
         modifier = Modifier
             .fillMaxWidth()
             .padding(top = 16.dp),
-        shape = RoundedCornerShape(12.dp),
+        shape = RoundedCornerShape(14.dp),
         color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f),
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp),
+                .padding(horizontal = 20.dp, vertical = 18.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             InsightCell(Modifier.weight(1f), "Score", scoreStr)
             VerticalDivider(
-                modifier = Modifier.height(44.dp),
+                modifier = Modifier.height(48.dp),
                 color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f),
             )
             InsightCell(Modifier.weight(1f), "Verdict", verdictShort)
-            VerticalDivider(
-                modifier = Modifier.height(44.dp),
-                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f),
-            )
-            InsightCell(Modifier.weight(1f), "Intent", intentLabel)
         }
     }
 }
