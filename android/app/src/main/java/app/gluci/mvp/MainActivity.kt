@@ -36,6 +36,7 @@ class MainActivity : ComponentActivity() {
         super.onResume()
         sessionVm?.refreshBilling()
         sessionVm?.refreshUsage()
+        sessionVm?.refreshSummaries()
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {

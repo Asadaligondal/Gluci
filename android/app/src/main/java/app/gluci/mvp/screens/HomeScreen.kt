@@ -9,6 +9,8 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
@@ -19,10 +21,13 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Add
+import androidx.compose.material.icons.outlined.CalendarMonth
+import androidx.compose.material.icons.outlined.DateRange
 import androidx.compose.material.icons.outlined.QrCodeScanner
 import androidx.compose.material.icons.outlined.Restaurant
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.Storefront
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -41,7 +46,13 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import app.gluci.mvp.data.BillingStatusResponse
+import app.gluci.mvp.data.DailySummaryDto
+import app.gluci.mvp.data.WeeklySummaryDto
 import app.gluci.mvp.vm.GluciViewModel
+import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
+import java.util.Locale
 
 private val HomeSageMuted = Color(0xFF769A8F)
 private val ShortcutCardShape = RoundedCornerShape(16.dp)
@@ -56,6 +67,9 @@ fun HomeScreen(
     val usage by vm.usage.collectAsState()
     val billing by vm.billing.collectAsState()
     val err by vm.error.collectAsState()
+    val daily by vm.dailySummary.collectAsState()
+    val weekly by vm.weeklySummary.collectAsState()
+    val summariesLoading by vm.summariesLoading.collectAsState()
 
     SereneAuthBackground {
         Column(Modifier.fillMaxSize()) {
@@ -107,6 +121,13 @@ fun HomeScreen(
                             modifier = Modifier.padding(top = 4.dp),
                         )
                     }
+                }
+                item {
+                    HomeSummariesSection(
+                        loading = summariesLoading,
+                        daily = daily,
+                        weekly = weekly,
+                    )
                 }
                 item {
                     HomeQuickRow(
@@ -332,5 +353,123 @@ private fun HomeChatRow(
             color = HomeSageMuted.copy(alpha = 0.5f),
             modifier = Modifier.padding(start = 10.dp),
         )
+    }
+}
+
+private fun formatSummaryRange(isoStart: String, isoEnd: String): String {
+    val fmt = DateTimeFormatter.ofPattern("MMM d", Locale.getDefault())
+    return try {
+        val a = Instant.parse(isoStart).atZone(ZoneId.systemDefault()).format(fmt)
+        val b = Instant.parse(isoEnd).atZone(ZoneId.systemDefault()).format(fmt)
+        "$a – $b"
+    } catch (_: Exception) {
+        ""
+    }
+}
+
+@Composable
+private fun HomeSummariesSection(
+    loading: Boolean,
+    daily: DailySummaryDto?,
+    weekly: WeeklySummaryDto?,
+) {
+    Column(
+        Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        Text(
+            "Your summaries",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        if (loading) {
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 8.dp),
+                horizontalArrangement = Arrangement.Center,
+            ) {
+                CircularProgressIndicator(
+                    strokeWidth = 2.dp,
+                    modifier = Modifier.size(28.dp),
+                    color = HomeSageMuted,
+                )
+            }
+        } else {
+            SummaryCard(
+                icon = Icons.Outlined.CalendarMonth,
+                title = "Today",
+                body = if (daily != null) {
+                    buildString {
+                        append("${daily.checks} checks · avg ${daily.averageScore}/10\n")
+                        if (daily.bestVerdict != null) {
+                            append("Best: ${daily.bestVerdict}")
+                            if (daily.bestScore != null) append(" (${daily.bestScore})")
+                            append("\n")
+                        }
+                        append("Focus: ${daily.improvementArea}\n")
+                        append("Tomorrow: ${daily.suggestionTomorrow}")
+                    }
+                } else {
+                    "No Gluci checks yet today. Send a meal photo, restaurant question, or grocery barcode to see your daily summary."
+                },
+            )
+            SummaryCard(
+                icon = Icons.Outlined.DateRange,
+                title = "Last 7 days",
+                body = if (weekly != null) {
+                    val range = formatSummaryRange(weekly.periodStart, weekly.periodEnd)
+                    buildString {
+                        if (range.isNotBlank()) append("$range\n")
+                        append("${weekly.checks} checks · avg ${weekly.averageScore}/10\n")
+                        append("${weekly.commonPattern}\n")
+                        append("Swap tip: ${weekly.bestSwapHint}\n")
+                        append("Trend: ${weekly.mostImprovedArea}\n")
+                        append(weekly.focusNextWeek)
+                    }
+                } else {
+                    "No checks recorded in the last 7 days. Your rolling week will appear here after your first scored decision."
+                },
+            )
+        }
+    }
+}
+
+@Composable
+private fun SummaryCard(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    title: String,
+    body: String,
+) {
+    val outline = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)
+    val cardFill = Color(0xFFF8F9F8)
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(ShortcutCardShape)
+            .background(cardFill)
+            .border(width = 1.dp, color = outline, shape = ShortcutCardShape)
+            .padding(horizontal = 16.dp, vertical = 14.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = HomeSageMuted,
+            modifier = Modifier.size(22.dp),
+        )
+        Column(Modifier.weight(1f)) {
+            Text(
+                title,
+                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
+                color = MaterialTheme.colorScheme.primary,
+            )
+            Spacer(Modifier.height(6.dp))
+            Text(
+                body,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
     }
 }

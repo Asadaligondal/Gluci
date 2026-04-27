@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { authAppBearer, type AuthedRequest } from "../../middleware/authApp.js";
-import { buildDailySummary } from "../../services/summaries.js";
+import { buildDailySummary, buildWeeklySummary } from "../../services/summaries.js";
 import { prisma } from "../../db.js";
 import { getConfig } from "../../config.js";
 
@@ -9,6 +9,12 @@ summaryRouter.use(authAppBearer);
 
 summaryRouter.get("/daily", async (req: AuthedRequest, res) => {
   const s = await buildDailySummary(req.userId!);
+  if (!s) return res.json({ summary: null });
+  res.json({ summary: s });
+});
+
+summaryRouter.get("/weekly", async (req: AuthedRequest, res) => {
+  const s = await buildWeeklySummary(req.userId!);
   if (!s) return res.json({ summary: null });
   res.json({ summary: s });
 });

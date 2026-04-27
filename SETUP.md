@@ -225,7 +225,8 @@ Processes up to 100 users (Telegram messages if `TELEGRAM_BOT_TOKEN` is set). Sc
 | POST | `/v1/chat/` | Bearer — body includes `conversationId` |
 | GET | `/v1/history/?conversationId=` | Bearer |
 | PATCH | `/v1/profile/` | Bearer |
-| GET | `/v1/summary/daily` | Bearer |
+| GET | `/v1/summary/daily` | Bearer — `{ summary: null }` or rich daily stats (checks, averageScore, bestVerdict, bestIntent, bestScore, improvementArea, suggestionTomorrow, `focus` same as suggestionTomorrow). |
+| GET | `/v1/summary/weekly` | Bearer — `{ summary: null }` or rolling 7-day stats (`periodStart`/`periodEnd` ISO, checks, averageScore, commonPattern, bestSwapHint, mostImprovedArea, focusNextWeek). |
 | GET | `/v1/summary/usage` | Bearer |
 | GET | `/v1/billing/status` | Bearer (Stripe) |
 | POST | `/v1/billing/checkout` | Bearer (Stripe) |

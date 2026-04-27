@@ -115,6 +115,41 @@ data class UsageResponse(
     @SerializedName("subscriptionStatus") val subscriptionStatus: String,
 )
 
+/** GET /v1/summary/daily — matches backend DailySummary. */
+data class DailySummaryDto(
+    val checks: Int,
+    @SerializedName("averageScore") val averageScore: Double,
+    @SerializedName("bestVerdict") val bestVerdict: String? = null,
+    @SerializedName("bestIntent") val bestIntent: String? = null,
+    @SerializedName("bestScore") val bestScore: Double? = null,
+    @SerializedName("improvementArea") val improvementArea: String,
+    @SerializedName("suggestionTomorrow") val suggestionTomorrow: String,
+    /** Same as suggestionTomorrow; kept for older API clients. */
+    val focus: String? = null,
+)
+
+data class DailySummaryEnvelope(
+    val summary: DailySummaryDto?,
+)
+
+/** GET /v1/summary/weekly — matches backend WeeklySummary. */
+data class WeeklySummaryDto(
+    @SerializedName("periodStart") val periodStart: String,
+    @SerializedName("periodEnd") val periodEnd: String,
+    val checks: Int,
+    @SerializedName("averageScore") val averageScore: Double,
+    @SerializedName("bestVerdict") val bestVerdict: String? = null,
+    @SerializedName("bestIntent") val bestIntent: String? = null,
+    @SerializedName("commonPattern") val commonPattern: String,
+    @SerializedName("bestSwapHint") val bestSwapHint: String,
+    @SerializedName("mostImprovedArea") val mostImprovedArea: String,
+    @SerializedName("focusNextWeek") val focusNextWeek: String,
+)
+
+data class WeeklySummaryEnvelope(
+    val summary: WeeklySummaryDto?,
+)
+
 data class BillingStatusResponse(
     @SerializedName("subscriptionStatus") val subscriptionStatus: String,
     @SerializedName("freeChecksUsed") val freeChecksUsed: Int,
@@ -185,6 +220,16 @@ interface GluciApi {
     suspend fun usage(
         @Header("Authorization") authorization: String,
     ): UsageResponse
+
+    @GET("v1/summary/daily")
+    suspend fun dailySummary(
+        @Header("Authorization") authorization: String,
+    ): DailySummaryEnvelope
+
+    @GET("v1/summary/weekly")
+    suspend fun weeklySummary(
+        @Header("Authorization") authorization: String,
+    ): WeeklySummaryEnvelope
 
     @GET("v1/channels/")
     suspend fun getChannels(

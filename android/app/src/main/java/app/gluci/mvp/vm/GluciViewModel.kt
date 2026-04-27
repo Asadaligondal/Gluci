@@ -12,9 +12,11 @@ import app.gluci.mvp.data.ChannelsResponse
 import app.gluci.mvp.data.ChatRequest
 import app.gluci.mvp.data.CreateConversationRequest
 import app.gluci.mvp.data.ConversationDto
+import app.gluci.mvp.data.DailySummaryDto
 import app.gluci.mvp.data.ProfilePatch
 import app.gluci.mvp.data.ProfileResponse
 import app.gluci.mvp.data.TokenStore
+import app.gluci.mvp.data.WeeklySummaryDto
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -56,6 +58,15 @@ class GluciViewModel(app: Application) : AndroidViewModel(app) {
 
     private val _usage = MutableStateFlow<Pair<Int, Int>?>(null)
     val usage: StateFlow<Pair<Int, Int>?> = _usage.asStateFlow()
+
+    private val _dailySummary = MutableStateFlow<DailySummaryDto?>(null)
+    val dailySummary: StateFlow<DailySummaryDto?> = _dailySummary.asStateFlow()
+
+    private val _weeklySummary = MutableStateFlow<WeeklySummaryDto?>(null)
+    val weeklySummary: StateFlow<WeeklySummaryDto?> = _weeklySummary.asStateFlow()
+
+    private val _summariesLoading = MutableStateFlow(false)
+    val summariesLoading: StateFlow<Boolean> = _summariesLoading.asStateFlow()
 
     private val _error = MutableStateFlow<String?>(null)
     val error: StateFlow<String?> = _error.asStateFlow()
@@ -105,6 +116,8 @@ class GluciViewModel(app: Application) : AndroidViewModel(app) {
         _profile.value = null
         _channels.value = null
         _usage.value = null
+        _dailySummary.value = null
+        _weeklySummary.value = null
         _error.value = null
         _sessionExpired.value = true
     }
@@ -117,6 +130,23 @@ class GluciViewModel(app: Application) : AndroidViewModel(app) {
                 refreshBilling()
                 refreshProfile()
                 refreshChannels()
+                refreshSummaries()
+            }
+        }
+    }
+
+    fun refreshSummaries() {
+        viewModelScope.launch {
+            val t = store.token.first() ?: return@launch
+            _summariesLoading.value = true
+            try {
+                val auth = "Bearer $t"
+                _dailySummary.value = api.dailySummary(auth).summary
+                _weeklySummary.value = api.weeklySummary(auth).summary
+            } catch (e: Exception) {
+                if (isUnauthorized(e)) handleUnauthorized()
+            } finally {
+                _summariesLoading.value = false
             }
         }
     }
@@ -258,6 +288,7 @@ class GluciViewModel(app: Application) : AndroidViewModel(app) {
                 onSuccess()
                 refreshConversations()
                 refreshUsage()
+                refreshSummaries()
             } catch (e: Exception) {
                 _error.value = when {
                     e is HttpException && e.code() == 409 ->
@@ -282,6 +313,7 @@ class GluciViewModel(app: Application) : AndroidViewModel(app) {
                 onSuccess()
                 refreshConversations()
                 refreshUsage()
+                refreshSummaries()
             } catch (e: Exception) {
                 _error.value = when {
                     e is HttpException && (e.code() == 401 || e.code() == 400) ->
@@ -301,6 +333,8 @@ class GluciViewModel(app: Application) : AndroidViewModel(app) {
             _messages.value = emptyList()
             _currentConversationId.value = null
             _channels.value = null
+            _dailySummary.value = null
+            _weeklySummary.value = null
             onDone()
         }
     }
@@ -405,6 +439,7 @@ class GluciViewModel(app: Application) : AndroidViewModel(app) {
                 refreshConversations()
                 refreshUsage()
                 refreshBilling()
+                refreshSummaries()
             } catch (e: Exception) {
                 if (isUnauthorized(e)) handleUnauthorized()
                 else _error.value = e.message ?: "Chat failed"
@@ -443,6 +478,7 @@ class GluciViewModel(app: Application) : AndroidViewModel(app) {
                 refreshConversations()
                 refreshUsage()
                 refreshBilling()
+                refreshSummaries()
             } catch (e: Exception) {
                 if (isUnauthorized(e)) handleUnauthorized()
                 else _error.value = e.message ?: "Upload failed"
@@ -479,6 +515,7 @@ class GluciViewModel(app: Application) : AndroidViewModel(app) {
                 refreshConversations()
                 refreshUsage()
                 refreshBilling()
+                refreshSummaries()
             } catch (e: Exception) {
                 if (isUnauthorized(e)) handleUnauthorized()
                 else _error.value = e.message ?: "Chat failed"
