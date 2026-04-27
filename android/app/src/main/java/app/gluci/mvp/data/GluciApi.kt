@@ -97,6 +97,18 @@ data class ProfileResponse(
     val goal: String? = null,
 )
 
+data class ChannelsResponse(
+    @SerializedName("telegramLinked") val telegramLinked: Boolean = false,
+    @SerializedName("whatsappLinked") val whatsappLinked: Boolean = false,
+    val linkCode: String? = null,
+    @SerializedName("linkCodeExpiresAt") val linkCodeExpiresAt: String? = null,
+)
+
+data class LinkCodeResponse(
+    val code: String,
+    @SerializedName("expiresAt") val expiresAt: String,
+)
+
 data class UsageResponse(
     @SerializedName("freeChecksUsed") val freeChecksUsed: Int,
     @SerializedName("freeLimit") val freeLimit: Int,
@@ -173,6 +185,16 @@ interface GluciApi {
     suspend fun usage(
         @Header("Authorization") authorization: String,
     ): UsageResponse
+
+    @GET("v1/channels/")
+    suspend fun getChannels(
+        @Header("Authorization") authorization: String,
+    ): ChannelsResponse
+
+    @POST("v1/channels/link-code")
+    suspend fun postLinkCode(
+        @Header("Authorization") authorization: String,
+    ): LinkCodeResponse
 
     @GET("v1/billing/status")
     suspend fun billingStatus(

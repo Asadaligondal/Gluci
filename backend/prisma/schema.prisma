@@ -16,6 +16,9 @@ model User {
   appToken             String?   @unique
   telegramChatId       String?   @unique
   whatsappWaId         String?   @unique
+  /// One-time /link code for tying Telegram or WhatsApp to this app user (15 min)
+  linkCode             String?   @unique
+  linkCodeExpiresAt    DateTime?
   freeChecksUsed       Int       @default(0)
   subscriptionStatus   String    @default("free")
   stripeCustomerId     String?   @unique

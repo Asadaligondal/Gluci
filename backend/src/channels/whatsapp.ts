@@ -2,6 +2,7 @@ import { getConfig } from "../config.js";
 import { getOrCreateWhatsAppUser } from "../services/users.js";
 import { handleChatTurn } from "../services/orchestrator.js";
 import { getOrCreateChannelConversation } from "../services/conversationService.js";
+import { tryLinkWhatsAppByCode } from "../services/linking.js";
 
 async function waSendText(to: string, body: string) {
   const cfg = getConfig();
@@ -62,12 +63,18 @@ export async function handleWhatsAppPayload(body: Record<string, unknown>) {
   const from = String(msg.from ?? "");
   if (!from) return;
 
-  const user = await getOrCreateWhatsAppUser(from);
-
   let text = "";
   if (msg.type === "text" && msg.text && typeof (msg.text as { body?: string }).body === "string") {
     text = (msg.text as { body: string }).body;
   }
+  const linkMatch = text.match(/^\/?link\s+([A-Fa-f0-9]+)\s*$/i);
+  if (linkMatch) {
+    const r = await tryLinkWhatsAppByCode(linkMatch[1], from);
+    await waSendText(from, r.message);
+    return;
+  }
+
+  const user = await getOrCreateWhatsAppUser(from);
 
   let imageBase64: string | undefined;
   let mimeType: string | undefined;

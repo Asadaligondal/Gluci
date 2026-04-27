@@ -11,6 +11,7 @@ import { billingRouter, handleStripeWebhook } from "./routes/v1/billing.js";
 import { summaryRouter } from "./routes/v1/summary.js";
 import { internalRouter } from "./routes/internal.js";
 import { conversationsRouter } from "./routes/v1/conversations.js";
+import { channelsRouter } from "./routes/v1/channels.js";
 import { migrateOrphanedMessages } from "./services/conversationService.js";
 import { handleTelegramUpdate } from "./channels/telegram.js";
 import { verifyWhatsApp, handleWhatsAppPayload } from "./channels/whatsapp.js";
@@ -53,6 +54,7 @@ app.use("/v1/profile", profileRouter);
 app.use("/v1/history", historyRouter);
 app.use("/v1/billing", billingRouter);
 app.use("/v1/summary", summaryRouter);
+app.use("/v1/channels", channelsRouter);
 app.use("/internal", internalRouter);
 
 app.post("/webhooks/telegram", async (req, res) => {

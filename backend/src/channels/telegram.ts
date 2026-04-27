@@ -2,6 +2,7 @@ import { getConfig } from "../config.js";
 import { getOrCreateTelegramUser } from "../services/users.js";
 import { handleChatTurn } from "../services/orchestrator.js";
 import { getOrCreateChannelConversation } from "../services/conversationService.js";
+import { tryLinkTelegramByCode } from "../services/linking.js";
 
 const TG_API = "https://api.telegram.org";
 
@@ -46,9 +47,14 @@ export async function handleTelegramUpdate(update: Record<string, unknown>) {
   if (!msg || !msg.chat) return;
   const chat = msg.chat as { id: number };
   const chatId = String(chat.id);
-  const user = await getOrCreateTelegramUser(chatId);
-
   let text = typeof msg.text === "string" ? msg.text : "";
+  const linkMatch = text.match(/^\/link\s+([A-Fa-f0-9]+)\s*$/);
+  if (linkMatch) {
+    const r = await tryLinkTelegramByCode(linkMatch[1], chatId);
+    await sendTelegramMessage(chatId, r.message);
+    return;
+  }
+  const user = await getOrCreateTelegramUser(chatId);
   const photos = msg.photo as { file_id: string }[] | undefined;
   let imageBase64: string | undefined;
   let mimeType: string | undefined;

@@ -32,8 +32,10 @@ import androidx.compose.material.icons.outlined.AccountCircle
 import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material.icons.outlined.CreditCard
 import androidx.compose.material.icons.outlined.Person
+import androidx.compose.material.icons.outlined.QuestionAnswer
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -62,6 +64,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
+import app.gluci.mvp.BuildConfig
 import app.gluci.mvp.vm.GluciViewModel
 
 private val SageGradientStart = Color(0xFF42655B)
@@ -116,6 +119,123 @@ private fun SettingsSectionHeader(
             text = title,
             style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
             color = MaterialTheme.colorScheme.onSurface,
+        )
+    }
+}
+
+@Composable
+private fun StatusPill(connected: Boolean) {
+    Text(
+        text = if (connected) "Connected" else "Not linked",
+        style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold),
+        color = if (connected) {
+            Color(0xFF2D6A4F)
+        } else {
+            MaterialTheme.colorScheme.onSurfaceVariant
+        },
+        modifier = Modifier
+            .clip(RoundedCornerShape(8.dp))
+            .background(
+                if (connected) {
+                    Color(0xFF2D6A4F).copy(alpha = 0.12f)
+                } else {
+                    MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                },
+            )
+            .padding(horizontal = 10.dp, vertical = 4.dp),
+    )
+}
+
+@Composable
+private fun ChannelLinkSection(
+    telegramLinked: Boolean,
+    whatsappLinked: Boolean,
+    linkCode: String?,
+    linkBusy: Boolean,
+    onGetCode: () -> Unit,
+    onOpenTelegram: () -> Unit,
+    onOpenWhatsApp: () -> Unit,
+) {
+    val botConfigured = BuildConfig.TELEGRAM_BOT_NAME != "YOUR_GLUCI_TELEGRAM_BOT"
+    Text(
+        "Get a 15-minute code, then in Telegram send `/link YOURCODE` or in WhatsApp send `link YOURCODE` (same code links both, one at a time is fine).",
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+    Spacer(Modifier.height(14.dp))
+    Row(
+        Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text("Telegram", style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Medium))
+        StatusPill(telegramLinked)
+    }
+    Spacer(Modifier.height(10.dp))
+    Row(
+        Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text("WhatsApp", style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Medium))
+        StatusPill(whatsappLinked)
+    }
+    Spacer(Modifier.height(16.dp))
+    if (linkCode != null) {
+        Text("Your link code (expires soon)", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Spacer(Modifier.height(4.dp))
+        Text(
+            linkCode,
+            style = MaterialTheme.typography.titleLarge.copy(
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.primary,
+            ),
+        )
+    }
+    Spacer(Modifier.height(14.dp))
+    Button(
+        onClick = onGetCode,
+        enabled = !linkBusy,
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(999.dp),
+        colors = ButtonDefaults.buttonColors(
+            containerColor = MaterialTheme.colorScheme.primary,
+            contentColor = MaterialTheme.colorScheme.onPrimary,
+        ),
+    ) {
+        if (linkBusy) {
+            CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onPrimary)
+        } else {
+            Text(
+                if (linkCode == null) "Generate link code" else "Refresh code",
+                style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold),
+            )
+        }
+    }
+    Spacer(Modifier.height(10.dp))
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        OutlinedButton(
+            onClick = onOpenTelegram,
+            enabled = botConfigured,
+            modifier = Modifier.weight(1f),
+            shape = RoundedCornerShape(12.dp),
+        ) {
+            Text("Telegram", maxLines = 1, style = MaterialTheme.typography.labelMedium)
+        }
+        OutlinedButton(
+            onClick = onOpenWhatsApp,
+            modifier = Modifier.weight(1f),
+            shape = RoundedCornerShape(12.dp),
+        ) {
+            Text("WhatsApp", maxLines = 1, style = MaterialTheme.typography.labelMedium)
+        }
+    }
+    if (!botConfigured) {
+        Spacer(Modifier.height(8.dp))
+        Text(
+            "Set `GLUC_TELEGRAM_BOT` in `android/gradle.properties` to your bot’s @username (no @) to enable Open Telegram.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
 }
@@ -265,6 +385,7 @@ fun ProfileScreen(vm: GluciViewModel, nav: NavController) {
     var goalSeededFromServer by remember { mutableStateOf(false) }
     val billing by vm.billing.collectAsState()
     val profile by vm.profile.collectAsState()
+    val channels by vm.channels.collectAsState()
     val busy by vm.busy.collectAsState()
     val err by vm.error.collectAsState()
     val ctx = LocalContext.current
@@ -272,6 +393,7 @@ fun ProfileScreen(vm: GluciViewModel, nav: NavController) {
     LaunchedEffect(Unit) {
         vm.refreshBilling()
         vm.refreshProfile()
+        vm.refreshChannels()
     }
     LaunchedEffect(profile) {
         if (!goalSeededFromServer && profile != null) {
@@ -415,6 +537,48 @@ fun ProfileScreen(vm: GluciViewModel, nav: NavController) {
                             "Save goal",
                             style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold),
                             modifier = Modifier.padding(vertical = 8.dp),
+                        )
+                    }
+                }
+
+                SettingsSectionHeader(
+                    Icons.Outlined.QuestionAnswer,
+                    "Telegram & WhatsApp",
+                    Modifier.padding(top = 10.dp),
+                )
+                SettingsCard {
+                    if (channels == null) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        ) {
+                            CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
+                            Text("Loading link status…", style = MaterialTheme.typography.bodyMedium)
+                        }
+                    } else {
+                        val code = channels!!.linkCode
+                        ChannelLinkSection(
+                            telegramLinked = channels!!.telegramLinked,
+                            whatsappLinked = channels!!.whatsappLinked,
+                            linkCode = code,
+                            linkBusy = busy,
+                            onGetCode = { vm.requestLinkCode() },
+                            onOpenTelegram = {
+                                val b = BuildConfig.TELEGRAM_BOT_NAME
+                                if (b != "YOUR_GLUCI_TELEGRAM_BOT") {
+                                    ctx.startActivity(
+                                        Intent(
+                                            Intent.ACTION_VIEW,
+                                            Uri.parse("https://t.me/${b.trim().removePrefix("@")}"),
+                                        ),
+                                    )
+                                }
+                            },
+                            onOpenWhatsApp = {
+                                ctx.startActivity(
+                                    Intent(Intent.ACTION_VIEW, Uri.parse(BuildConfig.WHATSAPP_DEEPLINK)),
+                                )
+                            },
                         )
                     }
                 }

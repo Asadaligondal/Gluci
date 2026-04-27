@@ -15,7 +15,11 @@ android {
         versionCode = 1
         versionName = "0.1.0"
         val base = (project.findProperty("GLUC_API_BASE") as String?) ?: "https://gluci.onrender.com"
+        val tgBot = (project.findProperty("GLUC_TELEGRAM_BOT") as String?) ?: "YOUR_GLUCI_TELEGRAM_BOT"
+        val waDeeplink = (project.findProperty("GLUC_WHATSAPP_WA_LINK") as String?) ?: "https://wa.me/15551885183"
         buildConfigField("String", "API_BASE", "\"$base\"")
+        buildConfigField("String", "TELEGRAM_BOT_NAME", "\"$tgBot\"")
+        buildConfigField("String", "WHATSAPP_DEEPLINK", "\"$waDeeplink\"")
     }
 
     buildTypes {

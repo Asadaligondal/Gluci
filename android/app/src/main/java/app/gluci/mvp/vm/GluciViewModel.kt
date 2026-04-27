@@ -8,6 +8,7 @@ import androidx.lifecycle.viewModelScope
 import app.gluci.mvp.data.ApiModule
 import app.gluci.mvp.data.AuthRequest
 import app.gluci.mvp.data.BillingStatusResponse
+import app.gluci.mvp.data.ChannelsResponse
 import app.gluci.mvp.data.ChatRequest
 import app.gluci.mvp.data.CreateConversationRequest
 import app.gluci.mvp.data.ConversationDto
@@ -65,6 +66,9 @@ class GluciViewModel(app: Application) : AndroidViewModel(app) {
     private val _profile = MutableStateFlow<ProfileResponse?>(null)
     val profile: StateFlow<ProfileResponse?> = _profile.asStateFlow()
 
+    private val _channels = MutableStateFlow<ChannelsResponse?>(null)
+    val channels: StateFlow<ChannelsResponse?> = _channels.asStateFlow()
+
     private val _paywallUrl = MutableStateFlow<String?>(null)
     val paywallUrl: StateFlow<String?> = _paywallUrl.asStateFlow()
 
@@ -99,6 +103,7 @@ class GluciViewModel(app: Application) : AndroidViewModel(app) {
         _currentConversationId.value = null
         _billing.value = null
         _profile.value = null
+        _channels.value = null
         _usage.value = null
         _error.value = null
         _sessionExpired.value = true
@@ -111,6 +116,37 @@ class GluciViewModel(app: Application) : AndroidViewModel(app) {
                 refreshUsage()
                 refreshBilling()
                 refreshProfile()
+                refreshChannels()
+            }
+        }
+    }
+
+    fun refreshChannels() {
+        val t = _token.value ?: return
+        viewModelScope.launch {
+            try {
+                _channels.value = api.getChannels("Bearer $t")
+            } catch (e: Exception) {
+                if (isUnauthorized(e)) handleUnauthorized()
+            }
+        }
+    }
+
+    /**
+     * Creates a 15-minute code. User sends in Telegram: `/link CODE` or in WhatsApp: `link CODE`.
+     */
+    fun requestLinkCode() {
+        val t = _token.value ?: return
+        viewModelScope.launch {
+            _busy.value = true
+            _error.value = null
+            try {
+                api.postLinkCode("Bearer $t")
+                _channels.value = api.getChannels("Bearer $t")
+            } catch (e: Exception) {
+                if (isUnauthorized(e)) handleUnauthorized() else _error.value = e.message
+            } finally {
+                _busy.value = false
             }
         }
     }
@@ -264,6 +300,7 @@ class GluciViewModel(app: Application) : AndroidViewModel(app) {
             _conversations.value = emptyList()
             _messages.value = emptyList()
             _currentConversationId.value = null
+            _channels.value = null
             onDone()
         }
     }
