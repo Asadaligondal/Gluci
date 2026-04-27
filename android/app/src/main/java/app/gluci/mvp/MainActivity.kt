@@ -8,6 +8,8 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -44,6 +46,16 @@ class MainActivity : ComponentActivity() {
             val vm: GluciViewModel = viewModel()
             sessionVm = vm
             GluciTheme {
+                val sessionExpired by vm.sessionExpired.collectAsState()
+                LaunchedEffect(sessionExpired) {
+                    if (sessionExpired) {
+                        vm.acknowledgeSessionExpired()
+                        nav.navigate("welcome") {
+                            popUpTo(0) { inclusive = true }
+                            launchSingleTop = true
+                        }
+                    }
+                }
                 NavHost(navController = nav, startDestination = "splash") {
                     composable("splash") {
                         LaunchedEffect(Unit) {

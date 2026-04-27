@@ -88,6 +88,11 @@ data class ProfilePatch(
     val goal: String? = null,
 )
 
+/** GET /v1/profile/ — goal is the main field used in the app UI. */
+data class ProfileResponse(
+    val goal: String? = null,
+)
+
 data class UsageResponse(
     @SerializedName("freeChecksUsed") val freeChecksUsed: Int,
     @SerializedName("freeLimit") val freeLimit: Int,
@@ -148,6 +153,11 @@ interface GluciApi {
         @Header("Authorization") authorization: String,
         @Query("conversationId") conversationId: String,
     ): HistoryResponse
+
+    @GET("v1/profile/")
+    suspend fun getProfile(
+        @Header("Authorization") authorization: String,
+    ): ProfileResponse
 
     @PATCH("v1/profile/")
     suspend fun patchProfile(

@@ -3,33 +3,55 @@ package app.gluci.mvp.screens
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Image
-import androidx.compose.material.icons.filled.QrCodeScanner
+import androidx.compose.material.icons.filled.ArrowUpward
+import androidx.compose.material.icons.filled.Chat
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Spa
+import androidx.compose.material.icons.outlined.AccountCircle
+import androidx.compose.material.icons.outlined.Image
+import androidx.compose.material.icons.outlined.Inventory2
+import androidx.compose.material.icons.outlined.PhotoCamera
+import androidx.compose.material.icons.outlined.QrCodeScanner
+import androidx.compose.material.icons.outlined.Restaurant
+import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.material.icons.outlined.Storefront
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.VerticalDivider
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Scaffold
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -39,13 +61,28 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import app.gluci.mvp.vm.GluciViewModel
 import app.gluci.mvp.vm.UiMessage
+import java.util.Calendar
 
-@OptIn(ExperimentalMaterial3Api::class)
+private val SageMuted = Color(0xFF769A8F)
+/** Mint “primary fixed” from mock — not all Material3 versions expose `primaryFixed` on ColorScheme. */
+private val PrimaryFixedMint = Color(0xFFC5EBDE)
+private val UserBubble = Color(0xFFC5EBDE).copy(alpha = 0.88f)
+private val UserBubbleText = Color(0xFF0D3129)
+private val AiBubble = Color.White.copy(alpha = 0.92f)
+private val MutedCaption = Color(0xFF9CA3AF)
+
 @Composable
 fun ChatScreen(
     vm: GluciViewModel,
@@ -56,9 +93,21 @@ fun ChatScreen(
     val busy by vm.busy.collectAsState()
     val err by vm.error.collectAsState()
     var input by remember { mutableStateOf("") }
+    val listState = rememberLazyListState()
 
     LaunchedEffect(conversationId) {
         vm.openConversation(conversationId) { }
+    }
+
+    LaunchedEffect(messages.size, busy) {
+        kotlinx.coroutines.delay(32)
+        val welcomeCount = if (messages.isEmpty() && !busy) 1 else 0
+        val lastIndex = welcomeCount + messages.size - 1 + if (busy) 1 else 0
+        val total = listState.layoutInfo.totalItemsCount
+        if (total > 0 && lastIndex >= 0) {
+            val target = lastIndex.coerceAtMost(total - 1).coerceAtLeast(0)
+            listState.animateScrollToItem(target)
+        }
     }
 
     val pickImage = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
@@ -66,82 +115,483 @@ fun ChatScreen(
         input = ""
     }
 
-    Scaffold(
-        modifier = Modifier.imePadding(),
-        topBar = {
-            TopAppBar(
-                title = { Text("Chat") },
-                navigationIcon = {
-                    IconButton(onClick = { nav.popBackStack() }) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-                    }
-                },
-                actions = {
-                    IconButton(onClick = { pickImage.launch("image/*") }) {
-                        Icon(Icons.Default.Image, contentDescription = "Photo")
-                    }
-                    IconButton(onClick = { nav.navigate("barcode") }) {
-                        Icon(Icons.Default.QrCodeScanner, contentDescription = "Scan barcode")
-                    }
-                },
+    BoxWithConstraints(Modifier.fillMaxSize().imePadding()) {
+        val density = LocalDensity.current
+        val maxW = maxWidth
+        Box(Modifier.fillMaxSize()) {
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .background(
+                        Brush.radialGradient(
+                            colors = listOf(
+                                Color(0xFFC5EBDE),
+                                Color(0xFFFAF9F7),
+                                Color(0xFFFAF9F7),
+                            ),
+                            center = androidx.compose.ui.geometry.Offset(
+                                x = with(density) { maxW.toPx() } * 0.88f,
+                                y = with(density) { 24.dp.toPx() },
+                            ),
+                            radius = with(density) { maxW.toPx() } * 1.25f,
+                        ),
+                    ),
             )
-        },
-    ) { padding ->
-        Column(Modifier.fillMaxSize().padding(padding)) {
+            Column(Modifier.fillMaxSize()) {
+            ChatTopBar(
+                onBack = { nav.popBackStack() },
+                onSettings = { nav.navigate("profile") },
+            )
             err?.let {
                 Text(
                     it,
                     color = MaterialTheme.colorScheme.error,
-                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp),
                 )
             }
             LazyColumn(
-                modifier = Modifier.weight(1f),
-                contentPadding = PaddingValues(12.dp, 8.dp, 12.dp, 8.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
+                state = listState,
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth(),
+                contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 24.dp, bottom = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 if (messages.isEmpty() && !busy) {
-                    item {
-                        Text(
-                            "Send a message, a food photo, or a restaurant question. Gluci keeps things practical and non‑judgy.",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
+                    item { WelcomeHero() }
                 }
                 items(
                     count = messages.size,
                     key = { i -> "m-$i-${messages[i].content.hashCode()}" },
                 ) { i ->
-                    Bubble(messages[i])
+                    ChatMessageBubble(messages[i])
                 }
                 if (busy) {
-                    item { CircularProgressIndicator(Modifier.padding(8.dp)) }
+                    item {
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.padding(12.dp),
+                                color = SageMuted,
+                                strokeWidth = 2.dp,
+                            )
+                        }
+                    }
                 }
             }
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier
+            Column(
+                Modifier
                     .fillMaxWidth()
-                    .padding(8.dp),
+                    .background(
+                        Brush.verticalGradient(
+                            colors = listOf(
+                                Color.Transparent,
+                                MaterialTheme.colorScheme.background.copy(alpha = 0.97f),
+                                MaterialTheme.colorScheme.background,
+                            ),
+                        ),
+                    )
+                    .padding(bottom = 8.dp),
             ) {
-                OutlinedTextField(
+                QuickActionPills(
+                    onCheckMeal = {
+                        vm.sendText("I want to check a meal. Should I eat this? (I'll send a photo next.)")
+                    },
+                    onRestaurant = {
+                        vm.sendText("Help me pick the best ~3 things to order for stable glucose. Restaurant name:")
+                    },
+                    onGrocery = { nav.navigate("barcode") },
+                )
+                ChatInputBar(
                     value = input,
                     onValueChange = { input = it },
-                    modifier = Modifier
-                        .weight(1f),
-                    placeholder = { Text("Message…") },
-                    minLines = 1,
-                    maxLines = 6,
-                )
-                if (!busy) {
-                    TextButton(
-                        onClick = {
-                            vm.sendText(input)
+                    onSend = {
+                        if (input.isNotBlank()) {
+                            vm.sendText(input.trim())
                             input = ""
-                        },
-                        enabled = input.isNotBlank(),
-                    ) { Text("Send") }
+                        }
+                    },
+                    onPickImage = { pickImage.launch("image/*") },
+                    onCamera = { pickImage.launch("image/*") },
+                    enabledSend = input.isNotBlank() && !busy,
+                    busy = busy,
+                )
+                GluciBottomNav(
+                    onChat = { /* already here */ },
+                    onRestaurant = {
+                        vm.sendText("Help me pick the best ~3 things to order for stable glucose. Restaurant name:")
+                    },
+                    onInventory = { nav.navigate("barcode") },
+                    onAccount = { nav.navigate("profile") },
+                )
+            }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ChatTopBar(
+    onBack: () -> Unit,
+    onSettings: () -> Unit,
+) {
+    val greeting = rememberGreeting()
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .statusBarsPadding(),
+        color = Color.White.copy(alpha = 0.88f),
+        shadowElevation = 4.dp,
+        tonalElevation = 0.dp,
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(64.dp)
+                .padding(horizontal = 16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            IconButton(onClick = onBack) {
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = SageMuted)
+            }
+            Box(
+                modifier = Modifier
+                    .size(32.dp)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text("G", color = SageMuted, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+            }
+            Text(
+                text = greeting,
+                style = MaterialTheme.typography.labelMedium,
+                color = MutedCaption,
+                modifier = Modifier.padding(start = 10.dp),
+                maxLines = 1,
+            )
+            Spacer(Modifier.weight(1f))
+            Text(
+                text = "Gluci",
+                style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
+                color = SageMuted,
+            )
+            Spacer(Modifier.weight(1f))
+            IconButton(onClick = onSettings) {
+                Icon(Icons.Outlined.Settings, contentDescription = "Settings", tint = SageMuted)
+            }
+        }
+    }
+}
+
+@Composable
+private fun rememberGreeting(): String {
+    val hour = remember {
+        Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
+    }
+    val part = when (hour) {
+        in 0..4 -> "Good evening"
+        in 5..11 -> "Good morning"
+        in 12..16 -> "Good afternoon"
+        else -> "Good evening"
+    }
+    return "$part — let's eat well"
+}
+
+@Composable
+private fun WelcomeHero() {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(bottom = 16.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Box(
+            modifier = Modifier
+                .size(64.dp)
+                .shadow(12.dp, RoundedCornerShape(16.dp))
+                .clip(RoundedCornerShape(16.dp))
+                .background(
+                    Brush.linearGradient(
+                        colors = listOf(
+                            PrimaryFixedMint,
+                            MaterialTheme.colorScheme.primaryContainer,
+                        ),
+                    ),
+                ),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                Icons.Filled.Spa,
+                contentDescription = null,
+                tint = Color.White,
+                modifier = Modifier.size(32.dp),
+            )
+        }
+        Text(
+            text = "Hello, I'm Gluci",
+            style = MaterialTheme.typography.displayLarge,
+            color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.padding(top = 8.dp),
+            textAlign = TextAlign.Center,
+        )
+        Text(
+            text = "Your companion for mindful eating and serene nutrition tracking.",
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(top = 4.dp, start = 24.dp, end = 24.dp),
+            textAlign = TextAlign.Center,
+        )
+    }
+}
+
+@Composable
+private fun ChatMessageBubble(m: UiMessage) {
+    val isUser = m.role == "user"
+    val time = GluciViewModel.formatMessageTime(m.createdAtMs)
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalAlignment = if (isUser) Alignment.End else Alignment.Start,
+    ) {
+        Surface(
+            shape = RoundedCornerShape(
+                topStart = 16.dp,
+                topEnd = 16.dp,
+                bottomEnd = if (isUser) 4.dp else 16.dp,
+                bottomStart = if (isUser) 16.dp else 4.dp,
+            ),
+            color = if (isUser) UserBubble else AiBubble,
+            modifier = Modifier
+                .widthIn(max = 320.dp)
+                .border(
+                    width = 1.dp,
+                    color = Color.White.copy(alpha = 0.6f),
+                    shape = RoundedCornerShape(
+                        topStart = 16.dp,
+                        topEnd = 16.dp,
+                        bottomEnd = if (isUser) 4.dp else 16.dp,
+                        bottomStart = if (isUser) 16.dp else 4.dp,
+                    ),
+                )
+                .shadow(2.dp, RoundedCornerShape(16.dp)),
+        ) {
+            Column(Modifier.padding(20.dp)) {
+                if (!isUser && m.verdict != null) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.padding(bottom = 12.dp),
+                    ) {
+                        Surface(
+                            shape = RoundedCornerShape(50),
+                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f),
+                        ) {
+                            Row(
+                                Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            ) {
+                                Icon(
+                                    Icons.Filled.CheckCircle,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(16.dp),
+                                )
+                                Text(
+                                    m.verdict,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.primary,
+                                )
+                            }
+                        }
+                    }
+                }
+                Text(
+                    text = m.content,
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = if (isUser) UserBubbleText else MaterialTheme.colorScheme.onSurface,
+                    lineHeight = 24.sp,
+                )
+                if (!isUser && (m.score != null || m.verdict != null)) {
+                    InsightStrip(m)
+                }
+            }
+        }
+        Text(
+            text = if (isUser) "You${if (time.isNotEmpty()) " • $time" else ""}" else "Gluci${if (time.isNotEmpty()) " • $time" else ""}",
+            style = MaterialTheme.typography.labelSmall,
+            color = MutedCaption,
+            fontSize = 10.sp,
+            modifier = Modifier.padding(top = 4.dp, start = if (isUser) 0.dp else 8.dp, end = if (isUser) 8.dp else 0.dp),
+        )
+    }
+}
+
+@Composable
+private fun InsightStrip(m: UiMessage) {
+    val scoreStr = m.score?.let { String.format("%.1f/10", it) } ?: "—"
+    val verdictShort = m.verdict ?: "—"
+    val intentLabel = m.intent?.takeIf { it.isNotEmpty() }?.let { s ->
+        s[0].uppercaseChar() + s.drop(1)
+    } ?: "—"
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 16.dp),
+        shape = RoundedCornerShape(12.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f),
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            InsightCell(Modifier.weight(1f), "Score", scoreStr)
+            VerticalDivider(
+                modifier = Modifier.height(44.dp),
+                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f),
+            )
+            InsightCell(Modifier.weight(1f), "Verdict", verdictShort)
+            VerticalDivider(
+                modifier = Modifier.height(44.dp),
+                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f),
+            )
+            InsightCell(Modifier.weight(1f), "Intent", intentLabel)
+        }
+    }
+}
+
+@Composable
+private fun InsightCell(modifier: Modifier = Modifier, label: String, value: String) {
+    Column(
+        modifier = modifier,
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Text(
+            label.uppercase(),
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Text(
+            value,
+            style = MaterialTheme.typography.titleLarge,
+            color = MaterialTheme.colorScheme.primary,
+            fontWeight = FontWeight.SemiBold,
+            modifier = Modifier.padding(top = 4.dp),
+            maxLines = 2,
+            textAlign = TextAlign.Center,
+        )
+    }
+}
+
+@Composable
+private fun QuickActionPills(
+    onCheckMeal: () -> Unit,
+    onRestaurant: () -> Unit,
+    onGrocery: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState())
+            .padding(horizontal = 20.dp, vertical = 8.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
+    ) {
+        QuickPill("Check a meal", Icons.Outlined.Restaurant, onCheckMeal)
+        QuickPill("Choose a restaurant", Icons.Outlined.Storefront, onRestaurant)
+        QuickPill("Scan grocery", Icons.Outlined.QrCodeScanner, onGrocery)
+    }
+}
+
+@Composable
+private fun QuickPill(
+    label: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    onClick: () -> Unit,
+) {
+    Surface(
+        shape = RoundedCornerShape(50),
+        color = Color.White.copy(alpha = 0.65f),
+        border = BorderStroke(1.dp, SageMuted.copy(alpha = 0.12f)),
+        shadowElevation = 1.dp,
+        modifier = Modifier.clickable(onClick = onClick),
+    ) {
+        Row(
+            Modifier.padding(horizontal = 18.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Icon(icon, contentDescription = null, tint = SageMuted, modifier = Modifier.size(18.dp))
+            Text(label, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+}
+
+@Composable
+private fun ChatInputBar(
+    value: String,
+    onValueChange: (String) -> Unit,
+    onSend: () -> Unit,
+    onPickImage: () -> Unit,
+    onCamera: () -> Unit,
+    enabledSend: Boolean,
+    busy: Boolean,
+) {
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 20.dp, vertical = 6.dp),
+        shape = RoundedCornerShape(16.dp),
+        color = Color.White.copy(alpha = 0.92f),
+        shadowElevation = 8.dp,
+        border = BorderStroke(1.dp, Color.White),
+    ) {
+        Row(
+            modifier = Modifier.padding(4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            IconButton(onClick = onPickImage, enabled = !busy) {
+                Icon(Icons.Outlined.Image, contentDescription = "Attach image", tint = MutedCaption)
+            }
+            IconButton(onClick = onCamera, enabled = !busy) {
+                Icon(Icons.Outlined.PhotoCamera, contentDescription = "Camera", tint = MutedCaption)
+            }
+            OutlinedTextField(
+                value = value,
+                onValueChange = onValueChange,
+                modifier = Modifier
+                    .weight(1f)
+                    .height(56.dp),
+                placeholder = { Text("Ask Gluci…", color = MutedCaption) },
+                singleLine = true,
+                enabled = !busy,
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = Color.Transparent,
+                    unfocusedBorderColor = Color.Transparent,
+                    disabledBorderColor = Color.Transparent,
+                    focusedContainerColor = Color.Transparent,
+                    unfocusedContainerColor = Color.Transparent,
+                ),
+            )
+            Box(
+                modifier = Modifier
+                    .size(48.dp)
+                    .clip(CircleShape)
+                    .background(
+                        Brush.linearGradient(
+                            colors = listOf(
+                                MaterialTheme.colorScheme.primary,
+                                MaterialTheme.colorScheme.primaryContainer,
+                            ),
+                        ),
+                    ),
+                contentAlignment = Alignment.Center,
+            ) {
+                IconButton(onClick = onSend, enabled = enabledSend) {
+                    Icon(
+                        Icons.Filled.ArrowUpward,
+                        contentDescription = "Send",
+                        tint = Color.White,
+                    )
                 }
             }
         }
@@ -149,28 +599,57 @@ fun ChatScreen(
 }
 
 @Composable
-private fun Bubble(m: UiMessage) {
-    val isUser = m.role == "user"
-    Row(
-        Modifier.fillMaxWidth(),
-        horizontalArrangement = if (isUser) Arrangement.End else Arrangement.Start,
+private fun GluciBottomNav(
+    onChat: () -> Unit,
+    onRestaurant: () -> Unit,
+    onInventory: () -> Unit,
+    onAccount: () -> Unit,
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(topStart = 32.dp, topEnd = 32.dp),
+        color = Color.White.copy(alpha = 0.92f),
+        shadowElevation = 12.dp,
+        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.35f)),
     ) {
-        Surface(
-            shape = RoundedCornerShape(
-                20.dp,
-                20.dp,
-                if (isUser) 4.dp else 20.dp,
-                if (isUser) 20.dp else 4.dp,
-            ),
-            color = if (isUser) MaterialTheme.colorScheme.primaryContainer
-            else MaterialTheme.colorScheme.surfaceVariant,
-            modifier = Modifier.widthIn(max = 320.dp),
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 24.dp, vertical = 12.dp),
+            horizontalArrangement = Arrangement.SpaceAround,
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text(
-                m.content,
-                modifier = Modifier.padding(12.dp, 10.dp, 12.dp, 10.dp),
-                style = MaterialTheme.typography.bodyLarge,
-                textAlign = TextAlign.Start,
+            BottomNavItem(Icons.Filled.Chat, selected = true, onClick = onChat)
+            BottomNavItem(Icons.Outlined.Restaurant, selected = false, onClick = onRestaurant)
+            BottomNavItem(Icons.Outlined.Inventory2, selected = false, onClick = onInventory)
+            BottomNavItem(Icons.Outlined.AccountCircle, selected = false, onClick = onAccount)
+        }
+    }
+}
+
+@Composable
+private fun BottomNavItem(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    selected: Boolean,
+    onClick: () -> Unit,
+) {
+    val bg = if (selected) {
+        Brush.linearGradient(listOf(SageMuted.copy(alpha = 0.22f), SageMuted.copy(alpha = 0.06f)))
+    } else {
+        Brush.linearGradient(listOf(Color.Transparent, Color.Transparent))
+    }
+    IconButton(onClick = onClick) {
+        Box(
+            modifier = Modifier
+                .size(44.dp)
+                .clip(CircleShape)
+                .background(bg),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = if (selected) SageMuted else MutedCaption,
             )
         }
     }

@@ -14,7 +14,7 @@ android {
         targetSdk = 35
         versionCode = 1
         versionName = "0.1.0"
-        val base = (project.findProperty("GLUC_API_BASE") as String?) ?: "http://10.0.2.2:3000"
+        val base = (project.findProperty("GLUC_API_BASE") as String?) ?: "https://gluci.onrender.com"
         buildConfigField("String", "API_BASE", "\"$base\"")
     }
 
@@ -59,6 +59,7 @@ dependencies {
     implementation("com.google.code.gson:gson:2.11.0")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("com.squareup.okhttp3:logging-interceptor:4.12.0")
+    implementation("com.squareup.okhttp3:okhttp-dnsoverhttps:4.12.0")
 
     implementation("androidx.camera:camera-camera2:1.4.0")
     implementation("androidx.camera:camera-lifecycle:1.4.0")
