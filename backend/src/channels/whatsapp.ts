@@ -65,7 +65,7 @@ export async function handleWhatsAppPayload(body: Record<string, unknown>) {
 
   let text = "";
   if (msg.type === "text" && msg.text && typeof (msg.text as { body?: string }).body === "string") {
-    text = (msg.text as { body: string }).body;
+    text = (msg.text as { body: string }).body.trim();
   }
   const linkMatch = text.match(/^\/?link\s+([A-Fa-f0-9]+)\s*$/i);
   if (linkMatch) {

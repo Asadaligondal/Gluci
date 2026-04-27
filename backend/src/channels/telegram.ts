@@ -47,8 +47,9 @@ export async function handleTelegramUpdate(update: Record<string, unknown>) {
   if (!msg || !msg.chat) return;
   const chat = msg.chat as { id: number };
   const chatId = String(chat.id);
-  let text = typeof msg.text === "string" ? msg.text : "";
-  const linkMatch = text.match(/^\/link\s+([A-Fa-f0-9]+)\s*$/);
+  let text = typeof msg.text === "string" ? msg.text.trim() : "";
+  // Telegram often sends /link@BotUsername CODE when the command is chosen from the menu.
+  const linkMatch = text.match(/^\/link(?:@\w+)?\s+([A-Fa-f0-9]+)\s*$/i);
   if (linkMatch) {
     const r = await tryLinkTelegramByCode(linkMatch[1], chatId);
     await sendTelegramMessage(chatId, r.message);
