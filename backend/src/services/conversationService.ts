@@ -33,20 +33,21 @@ export async function getConversationForUser(userId: string, conversationId: str
 }
 
 export async function migrateOrphanedMessages() {
-  const groups = await prisma.message.groupBy({
-    by: ["userId"],
+  const rows = await prisma.message.findMany({
     where: { conversationId: null },
+    select: { userId: true },
   });
-  for (const g of groups) {
+  const userIds = [...new Set(rows.map((r) => r.userId))];
+  for (const userId of userIds) {
     const conv = await prisma.conversation.create({
       data: {
-        userId: g.userId,
+        userId,
         title: "Previous messages",
         messagingChannel: null,
       },
     });
     await prisma.message.updateMany({
-      where: { userId: g.userId, conversationId: null },
+      where: { userId, conversationId: null },
       data: { conversationId: conv.id },
     });
   }
