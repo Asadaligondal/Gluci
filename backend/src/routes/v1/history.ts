@@ -3,6 +3,7 @@ import { z } from "zod";
 import { prisma } from "../../db.js";
 import { authAppBearer, type AuthedRequest } from "../../middleware/authApp.js";
 import { getConversationForUser } from "../../services/conversationService.js";
+import { getConfig } from "../../config.js";
 
 export const historyRouter = Router();
 historyRouter.use(authAppBearer);
@@ -12,6 +13,7 @@ historyRouter.get("/", async (req: AuthedRequest, res) => {
   if (!q.success) return res.status(400).json({ error: "conversationId query required" });
   const conv = await getConversationForUser(req.userId!, q.data.conversationId);
   if (!conv) return res.status(404).json({ error: "Conversation not found" });
+  const base = getConfig().PUBLIC_BASE_URL.replace(/\/$/, "");
   const rows = await prisma.message.findMany({
     where: { userId: req.userId!, conversationId: q.data.conversationId },
     orderBy: { createdAt: "asc" },
@@ -39,11 +41,14 @@ historyRouter.get("/", async (req: AuthedRequest, res) => {
           /* ignore malformed metadata */
         }
       }
+      const imageUrl =
+        m.imageUrl && m.imageUrl.length > 0 ? `${base}/static/uploads/${m.imageUrl}` : null;
       return {
         id: m.id,
         role: m.role,
         content: m.content,
         createdAt: m.createdAt,
+        imageUrl,
         score,
         verdict,
         intent,

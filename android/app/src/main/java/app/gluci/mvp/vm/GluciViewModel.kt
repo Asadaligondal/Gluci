@@ -30,6 +30,7 @@ import java.time.format.DateTimeFormatter
 data class UiMessage(
     val role: String,
     val content: String,
+    val imageUrl: String? = null,
     val score: Double? = null,
     val verdict: String? = null,
     val intent: String? = null,
@@ -377,6 +378,7 @@ class GluciViewModel(app: Application) : AndroidViewModel(app) {
                     UiMessage(
                         role = it.role,
                         content = it.content,
+                        imageUrl = it.imageUrl,
                         score = it.score,
                         verdict = it.verdict,
                         intent = it.intent,
@@ -430,6 +432,7 @@ class GluciViewModel(app: Application) : AndroidViewModel(app) {
                 appendLocalTurn(
                     user = text.trim(),
                     assistant = out.reply,
+                    userImageUrl = null,
                     score = out.score,
                     verdict = out.verdict,
                     intent = out.intent,
@@ -467,8 +470,9 @@ class GluciViewModel(app: Application) : AndroidViewModel(app) {
                     ),
                 )
                 appendLocalTurn(
-                    user = caption ?: "(photo)",
+                    user = caption?.trim().orEmpty(),
                     assistant = out.reply,
+                    userImageUrl = out.userImageUrl,
                     score = out.score,
                     verdict = out.verdict,
                     intent = out.intent,
@@ -506,6 +510,7 @@ class GluciViewModel(app: Application) : AndroidViewModel(app) {
                 appendLocalTurn(
                     user = text,
                     assistant = out.reply,
+                    userImageUrl = null,
                     score = out.score,
                     verdict = out.verdict,
                     intent = out.intent,
@@ -547,6 +552,7 @@ class GluciViewModel(app: Application) : AndroidViewModel(app) {
     private fun appendLocalTurn(
         user: String,
         assistant: String,
+        userImageUrl: String? = null,
         score: Double? = null,
         verdict: String? = null,
         intent: String? = null,
@@ -554,7 +560,7 @@ class GluciViewModel(app: Application) : AndroidViewModel(app) {
     ) {
         val now = System.currentTimeMillis()
         val cur = _messages.value.toMutableList()
-        cur.add(UiMessage("user", user, createdAtMs = now))
+        cur.add(UiMessage("user", user, imageUrl = userImageUrl, createdAtMs = now))
         cur.add(
             UiMessage(
                 role = "assistant",

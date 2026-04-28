@@ -46,6 +46,7 @@ const uploadsDir = path.join(process.cwd(), "data", "uploads");
 fs.mkdirSync(cardsDir, { recursive: true });
 fs.mkdirSync(uploadsDir, { recursive: true });
 app.use("/static/cards", express.static(cardsDir));
+app.use("/static/uploads", express.static(uploadsDir));
 
 app.use("/v1/auth", authRouter);
 app.use("/v1/chat", chatRouter);

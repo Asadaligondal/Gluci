@@ -3,7 +3,7 @@ import { getConfig } from "../config.js";
 import { canUseFreeCheck, isSubscribed } from "./users.js";
 import { runGluciTurn } from "./llm.js";
 import { lookupBarcode } from "./openFoodFacts.js";
-import { renderShareCard } from "./shareCard.js";
+import { renderShareCard, saveUploadBase64 } from "./shareCard.js";
 import { getConversationForUser } from "./conversationService.js";
 
 function profileToContext(profile: { goal: string | null; dietaryJson: string | null; memoryJson: string | null }) {
@@ -27,6 +27,7 @@ export async function handleChatTurn(params: {
   reply: string;
   structured: Awaited<ReturnType<typeof runGluciTurn>>;
   shareCardUrl?: string;
+  userImageUrl?: string;
   paywall?: { message: string; checkoutUrl?: string };
 }> {
   const cfg = getConfig();
@@ -113,12 +114,18 @@ export async function handleChatTurn(params: {
       : ({ role: "assistant" as const, content: m.content }),
   );
 
+  let userImageFilename: string | undefined;
+  if (params.imageBase64 && params.mimeType) {
+    userImageFilename = await saveUploadBase64(params.imageBase64, params.mimeType);
+  }
+
   await prisma.message.create({
     data: {
       userId: params.userId,
       conversationId: params.conversationId,
       role: "user",
-      content: enriched || "(image)",
+      content: enriched || (userImageFilename ? "" : "(image)"),
+      imageUrl: userImageFilename ?? null,
       metadata: JSON.stringify({ channel: params.channel, hasImage: Boolean(params.imageBase64) }),
     },
   });
@@ -136,7 +143,12 @@ export async function handleChatTurn(params: {
   });
 
   let shareCardUrl: string | undefined;
-  if (structured.suggestShareCard && structured.countAsDecision) {
+  /** Share card for any counted food decision (LLM often omits suggestShareCard). */
+  const shouldRenderShareCard =
+    structured.countAsDecision &&
+    structured.intent !== "general" &&
+    structured.verdict.trim().toLowerCase() !== "subscribe";
+  if (shouldRenderShareCard) {
     const card = await renderShareCard({
       score: structured.glucoseGalScore,
       verdict: structured.verdict,
@@ -195,5 +207,11 @@ export async function handleChatTurn(params: {
     /* ignore */
   }
 
-  return { reply: finalReply, structured, shareCardUrl };
+  const base = cfg.PUBLIC_BASE_URL.replace(/\/$/, "");
+  return {
+    reply: finalReply,
+    structured,
+    shareCardUrl,
+    userImageUrl: userImageFilename ? `${base}/static/uploads/${userImageFilename}` : undefined,
+  };
 }

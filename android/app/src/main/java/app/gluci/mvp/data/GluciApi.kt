@@ -60,6 +60,7 @@ data class ChatResponse(
     val intent: String?,
     val topOrders: List<TopOrder>?,
     @SerializedName("shareCardUrl") val shareCardUrl: String?,
+    @SerializedName("userImageUrl") val userImageUrl: String? = null,
     val paywall: PaywallInfo?,
 )
 
@@ -82,6 +83,7 @@ data class HistoryMessage(
     val id: String,
     val role: String,
     val content: String,
+    val imageUrl: String? = null,
     val score: Double? = null,
     val verdict: String? = null,
     val intent: String? = null,

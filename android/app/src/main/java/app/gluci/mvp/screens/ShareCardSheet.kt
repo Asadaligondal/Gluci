@@ -44,26 +44,12 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
-import app.gluci.mvp.BuildConfig
 import coil.compose.AsyncImage
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.net.URL
-
-/**
- * Rewrites "http://localhost:..." or "http://127.0.0.1:..." to match the
- * configured API base host. Lets share-card URLs returned by a locally-run
- * backend be reached from the emulator (10.0.2.2) without changing PUBLIC_BASE_URL.
- */
-private fun String.reachableMediaUrl(): String {
-    val apiBase = BuildConfig.API_BASE
-    val host = runCatching { java.net.URI(apiBase).host }.getOrNull() ?: return this
-    return this
-        .replace("//localhost", "//$host")
-        .replace("//127.0.0.1", "//$host")
-}
 
 /**
  * Small clickable preview rendered inside an assistant bubble whenever the

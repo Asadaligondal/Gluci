@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -62,6 +63,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
@@ -73,7 +75,7 @@ import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import app.gluci.mvp.vm.GluciViewModel
 import app.gluci.mvp.vm.UiMessage
-import java.util.Calendar
+import coil.compose.AsyncImage
 
 private val SageMuted = Color(0xFF769A8F)
 /** Mint “primary fixed” from mock — not all Material3 versions expose `primaryFixed` on ColorScheme. */
@@ -163,7 +165,10 @@ fun ChatScreen(
                 }
                 items(
                     count = messages.size,
-                    key = { i -> "m-$i-${messages[i].content.hashCode()}" },
+                    key = { i ->
+                        val msg = messages[i]
+                        "m-$i-${msg.content.hashCode()}-${msg.imageUrl}-${msg.shareCardUrl}"
+                    },
                 ) { i ->
                     ChatMessageBubble(
                         m = messages[i],
@@ -255,7 +260,6 @@ private fun ChatTopBar(
     onBack: () -> Unit,
     onSettings: () -> Unit,
 ) {
-    val greeting = rememberGreeting()
     Surface(
         modifier = Modifier
             .fillMaxWidth()
@@ -264,58 +268,32 @@ private fun ChatTopBar(
         shadowElevation = 4.dp,
         tonalElevation = 0.dp,
     ) {
-        Row(
+        Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(64.dp)
-                .padding(horizontal = 16.dp),
-            verticalAlignment = Alignment.CenterVertically,
+                .height(56.dp)
+                .padding(horizontal = 4.dp),
         ) {
-            IconButton(onClick = onBack) {
+            IconButton(
+                onClick = onBack,
+                modifier = Modifier.align(Alignment.CenterStart),
+            ) {
                 Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = SageMuted)
             }
-            Box(
-                modifier = Modifier
-                    .size(32.dp)
-                    .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text("G", color = SageMuted, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
-            }
-            Text(
-                text = greeting,
-                style = MaterialTheme.typography.labelMedium,
-                color = MutedCaption,
-                modifier = Modifier.padding(start = 10.dp),
-                maxLines = 1,
-            )
-            Spacer(Modifier.weight(1f))
             Text(
                 text = "Gluci",
-                style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
+                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
                 color = SageMuted,
+                modifier = Modifier.align(Alignment.Center),
             )
-            Spacer(Modifier.weight(1f))
-            IconButton(onClick = onSettings) {
+            IconButton(
+                onClick = onSettings,
+                modifier = Modifier.align(Alignment.CenterEnd),
+            ) {
                 Icon(Icons.Outlined.Settings, contentDescription = "Settings", tint = SageMuted)
             }
         }
     }
-}
-
-@Composable
-private fun rememberGreeting(): String {
-    val hour = remember {
-        Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
-    }
-    val part = when (hour) {
-        in 0..4 -> "Good evening"
-        in 5..11 -> "Good morning"
-        in 12..16 -> "Good afternoon"
-        else -> "Good evening"
-    }
-    return "$part — let's eat well"
 }
 
 @Composable
@@ -432,12 +410,27 @@ private fun ChatMessageBubble(
                         }
                     }
                 }
-                Text(
-                    text = m.content,
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = if (isUser) UserBubbleText else MaterialTheme.colorScheme.onSurface,
-                    lineHeight = 24.sp,
-                )
+                if (isUser && !m.imageUrl.isNullOrBlank()) {
+                    val imgUrl = remember(m.imageUrl) { m.imageUrl!!.reachableMediaUrl() }
+                    AsyncImage(
+                        model = imgUrl,
+                        contentDescription = "Your photo",
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 120.dp, max = 220.dp)
+                            .clip(RoundedCornerShape(12.dp)),
+                    )
+                }
+                if (m.content.isNotBlank()) {
+                    Text(
+                        text = m.content,
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = if (isUser) UserBubbleText else MaterialTheme.colorScheme.onSurface,
+                        lineHeight = 24.sp,
+                        modifier = Modifier.padding(top = if (isUser && !m.imageUrl.isNullOrBlank()) 10.dp else 0.dp),
+                    )
+                }
                 if (showInsight) {
                     InsightStrip(m)
                 }
