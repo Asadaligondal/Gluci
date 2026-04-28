@@ -111,8 +111,9 @@ app.use((err: unknown, _req: express.Request, res: express.Response, _next: expr
   res.status(500).json({ error: "Server error" });
 });
 
-app.listen(cfg.PORT, async () => {
-  console.log(`Gluci API listening on :${cfg.PORT}`);
+const host = "0.0.0.0";
+app.listen(cfg.PORT, host, async () => {
+  console.log(`Gluci API listening on ${host}:${cfg.PORT}`);
   try {
     await migrateOrphanedMessages();
   } catch (e) {
