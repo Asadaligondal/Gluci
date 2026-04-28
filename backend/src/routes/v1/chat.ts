@@ -35,6 +35,7 @@ chatRouter.post("/", async (req: AuthedRequest, res) => {
       intent: out.structured.intent,
       topOrders: out.structured.topOrders ?? [],
       shareCardUrl: out.shareCardUrl,
+      shareLandingUrl: out.shareLandingUrl,
       userImageUrl: out.userImageUrl,
       paywall: out.paywall,
     });

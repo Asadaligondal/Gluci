@@ -27,11 +27,33 @@ model User {
   subscriptionCurrentPeriodEnd DateTime?
   subscriptionCancelAtPeriodEnd Boolean @default(false)
   reengagementOptOut   Boolean   @default(false)
+  /// Minimum whole days between automated re-engagement pings (1–30).
+  reengagementFrequencyDays Int   @default(1)
   lastReengagementAt   DateTime?
+  /// Opaque referral code for share links (`GET /r/:shareRef`).
+  shareRef             String?   @unique
+  /// Android first-run coach marks completed.
+  appOnboardingComplete Boolean  @default(false)
+  telegramOnboardingSent Boolean @default(false)
+  whatsappOnboardingSent Boolean @default(false)
   profile              Profile?
   messages             Message[]
   usageEvents          UsageEvent[]
   conversations        Conversation[]
+  analyticsEvents      AnalyticsEvent[]
+}
+
+model AnalyticsEvent {
+  id         String   @id @default(cuid())
+  createdAt  DateTime @default(now())
+  userId     String?
+  user       User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  name       String
+  properties Json?
+  source     String
+
+  @@index([userId])
+  @@index([name, createdAt])
 }
 
 model Conversation {

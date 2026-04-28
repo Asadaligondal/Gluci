@@ -3,6 +3,7 @@ import Stripe from "stripe";
 import { getConfig } from "../../config.js";
 import { authAppBearer, type AuthedRequest } from "../../middleware/authApp.js";
 import { prisma } from "../../db.js";
+import { logAnalytics } from "../../services/analytics.js";
 
 export const billingRouter = Router();
 billingRouter.use(authAppBearer);
@@ -160,6 +161,12 @@ export async function handleStripeWebhook(rawBody: Buffer, signature: string | u
             where: { id: userId },
             data: { stripeCustomerId: customerId, subscriptionStatus: "active" },
           });
+          void logAnalytics({
+            userId,
+            name: "stripe_checkout_completed",
+            properties: { sessionId: s.id },
+            source: "server",
+          });
         }
         if (s.subscription) {
           const subId = typeof s.subscription === "string" ? s.subscription : s.subscription.id;
@@ -171,7 +178,18 @@ export async function handleStripeWebhook(rawBody: Buffer, signature: string | u
       case "customer.subscription.created":
       case "customer.subscription.updated":
       case "customer.subscription.deleted": {
-        await applySubscriptionToUser(event.data.object as Stripe.Subscription);
+        const sub = event.data.object as Stripe.Subscription;
+        await applySubscriptionToUser(sub);
+        const customerId = typeof sub.customer === "string" ? sub.customer : sub.customer.id;
+        const u = await prisma.user.findFirst({ where: { stripeCustomerId: customerId }, select: { id: true } });
+        if (u) {
+          void logAnalytics({
+            userId: u.id,
+            name: "subscription_change",
+            properties: { status: sub.status, type: event.type },
+            source: "server",
+          });
+        }
         break;
       }
       case "invoice.payment_failed": {

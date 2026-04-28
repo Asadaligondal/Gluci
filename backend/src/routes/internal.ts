@@ -3,6 +3,7 @@ import { getConfig } from "../config.js";
 import { prisma } from "../db.js";
 import { usersEligibleForReengagement, buildDailySummary } from "../services/summaries.js";
 import { sendTelegramMessage } from "../channels/telegram.js";
+import { logAnalytics } from "../services/analytics.js";
 
 export const internalRouter = Router();
 
@@ -21,6 +22,12 @@ internalRouter.get("/cron/reengage", async (req, res) => {
     try {
       if (u.telegramChatId) {
         await sendTelegramMessage(u.telegramChatId, msg);
+        void logAnalytics({
+          userId: u.id,
+          name: "reengagement_sent",
+          properties: { channel: "telegram" },
+          source: "server",
+        });
       }
       // WhatsApp outbound requires approved templates for many cases — skip generic push in MVP unless templates configured
       await prisma.user.update({

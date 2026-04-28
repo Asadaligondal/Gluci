@@ -254,13 +254,25 @@ export async function buildWeeklySummary(userId: string): Promise<WeeklySummary 
 }
 
 export async function usersEligibleForReengagement() {
-  const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000);
-  return prisma.user.findMany({
+  const candidates = await prisma.user.findMany({
     where: {
       reengagementOptOut: false,
-      OR: [{ lastReengagementAt: null }, { lastReengagementAt: { lt: yesterday } }],
     },
-    select: { id: true, telegramChatId: true, whatsappWaId: true, lastReengagementAt: true },
-    take: 100,
+    select: {
+      id: true,
+      telegramChatId: true,
+      whatsappWaId: true,
+      lastReengagementAt: true,
+      reengagementFrequencyDays: true,
+    },
+    take: 200,
   });
+  const now = Date.now();
+  const eligible = candidates.filter((u) => {
+    const freq = Math.max(1, Math.min(30, u.reengagementFrequencyDays ?? 1));
+    const minMs = freq * 24 * 60 * 60 * 1000;
+    if (!u.lastReengagementAt) return true;
+    return now - u.lastReengagementAt.getTime() >= minMs;
+  });
+  return eligible.slice(0, 100);
 }

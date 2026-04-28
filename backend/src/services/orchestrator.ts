@@ -1,3 +1,4 @@
+import path from "path";
 import { prisma } from "../db.js";
 import { getConfig } from "../config.js";
 import { canUseFreeCheck, isSubscribed } from "./users.js";
@@ -5,6 +6,8 @@ import { runGluciTurn } from "./llm.js";
 import { lookupBarcode } from "./openFoodFacts.js";
 import { renderShareCard, saveUploadBase64 } from "./shareCard.js";
 import { getConversationForUser } from "./conversationService.js";
+import { ensureShareRef } from "./shareRef.js";
+import { logAnalytics } from "./analytics.js";
 
 function profileToContext(profile: { goal: string | null; dietaryJson: string | null; memoryJson: string | null }) {
   const parts: string[] = [];
@@ -27,6 +30,7 @@ export async function handleChatTurn(params: {
   reply: string;
   structured: Awaited<ReturnType<typeof runGluciTurn>>;
   shareCardUrl?: string;
+  shareLandingUrl?: string;
   userImageUrl?: string;
   paywall?: { message: string; checkoutUrl?: string };
 }> {
@@ -88,6 +92,7 @@ export async function handleChatTurn(params: {
         message: msg,
         checkoutUrl,
       },
+      shareLandingUrl: undefined,
     };
   }
 
@@ -143,18 +148,31 @@ export async function handleChatTurn(params: {
   });
 
   let shareCardUrl: string | undefined;
+  let shareLandingUrl: string | undefined;
   /** Share card for any counted food decision (LLM often omits suggestShareCard). */
   const shouldRenderShareCard =
     structured.countAsDecision &&
     structured.intent !== "general" &&
     structured.verdict.trim().toLowerCase() !== "subscribe";
   if (shouldRenderShareCard) {
+    const shareRef = await ensureShareRef(user.id);
+    const baseUrl = cfg.PUBLIC_BASE_URL.replace(/\/$/, "");
+    shareLandingUrl = `${baseUrl}/r/${shareRef}`;
+    const heroAbs = userImageFilename ? path.join(process.cwd(), "data", "uploads", userImageFilename) : undefined;
     const card = await renderShareCard({
       score: structured.glucoseGalScore,
       verdict: structured.verdict,
       insight: structured.userReply.slice(0, 400),
+      subtitle: `Join Gluci: ${shareLandingUrl}`,
+      heroImagePath: heroAbs,
     });
     shareCardUrl = card.relativeUrl;
+    void logAnalytics({
+      userId: user.id,
+      name: "share_card_generated",
+      properties: { intent: structured.intent, hasHero: Boolean(heroAbs) },
+      source: params.channel,
+    });
   }
 
   const finalReply = structured.userReply;
@@ -191,6 +209,12 @@ export async function handleChatTurn(params: {
         verdict: structured.verdict,
       },
     });
+    void logAnalytics({
+      userId: params.userId,
+      name: "food_decision_completed",
+      properties: { intent: structured.intent, score: structured.glucoseGalScore },
+      source: params.channel,
+    });
   }
 
   // Lightweight memory update (MVP): append last verdict to memoryJson
@@ -212,6 +236,7 @@ export async function handleChatTurn(params: {
     reply: finalReply,
     structured,
     shareCardUrl,
+    shareLandingUrl,
     userImageUrl: userImageFilename ? `${base}/static/uploads/${userImageFilename}` : undefined,
   };
 }

@@ -1,8 +1,13 @@
+import { prisma } from "../db.js";
 import { getConfig } from "../config.js";
 import { getOrCreateWhatsAppUser } from "../services/users.js";
 import { handleChatTurn } from "../services/orchestrator.js";
 import { getOrCreateChannelConversation } from "../services/conversationService.js";
 import { tryLinkWhatsAppByCode } from "../services/linking.js";
+
+const WA_ONBOARDING =
+  "Welcome to Gluci — text me before you eat: meal photos, restaurant questions, or a grocery barcode number. " +
+  "Reply STOP NUDGES to mute daily check-ins, NOTIFY to turn them back on.";
 
 async function waSendText(to: string, body: string) {
   const cfg = getConfig();
@@ -76,6 +81,18 @@ export async function handleWhatsAppPayload(body: Record<string, unknown>) {
 
   const user = await getOrCreateWhatsAppUser(from);
 
+  const low = text.toLowerCase();
+  if (low === "stop nudges" || low === "/stop") {
+    await prisma.user.update({ where: { id: user.id }, data: { reengagementOptOut: true } });
+    await waSendText(from, "Daily nudges are off. Text NOTIFY to turn them back on.");
+    return;
+  }
+  if (low === "notify" || low === "notify gluci") {
+    await prisma.user.update({ where: { id: user.id }, data: { reengagementOptOut: false } });
+    await waSendText(from, "Daily nudges are on. Text STOP NUDGES to mute.");
+    return;
+  }
+
   let imageBase64: string | undefined;
   let mimeType: string | undefined;
   if (msg.type === "image" && msg.image && typeof (msg.image as { id?: string }).id === "string") {
@@ -91,8 +108,13 @@ export async function handleWhatsAppPayload(body: Record<string, unknown>) {
   const m = text.match(/\b(\d{8,14})\b/);
   if (m) barcode = m[1];
 
+  if (!user.whatsappOnboardingSent && (text || imageBase64)) {
+    await prisma.user.update({ where: { id: user.id }, data: { whatsappOnboardingSent: true } });
+    await waSendText(from, WA_ONBOARDING);
+  }
+
   if (!text && !imageBase64) {
-    await waSendText(from, "Send me a food photo, restaurant question, or grocery item (or a barcode number).");
+    await waSendText(from, "Send a food photo, restaurant question, or grocery barcode number.");
     return;
   }
 

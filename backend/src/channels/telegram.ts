@@ -1,3 +1,4 @@
+import { prisma } from "../db.js";
 import { getConfig } from "../config.js";
 import { getOrCreateTelegramUser } from "../services/users.js";
 import { handleChatTurn } from "../services/orchestrator.js";
@@ -5,6 +6,12 @@ import { getOrCreateChannelConversation } from "../services/conversationService.
 import { tryLinkTelegramByCode } from "../services/linking.js";
 
 const TG_API = "https://api.telegram.org";
+
+const ONBOARDING =
+  "Welcome to Gluci — your friendly food coach *before* you eat.\n\n" +
+  "Send a meal photo, ask about a restaurant or menu, or type a grocery barcode. " +
+  "You get a GlucoseGal score, a clear verdict, and practical tweaks—no shame.\n\n" +
+  "Commands:\n/stop — mute daily check-in nudges\n/notify — turn nudges back on";
 
 async function tgMethod(method: string, body: Record<string, unknown>) {
   const cfg = getConfig();
@@ -48,14 +55,37 @@ export async function handleTelegramUpdate(update: Record<string, unknown>) {
   const chat = msg.chat as { id: number };
   const chatId = String(chat.id);
   let text = typeof msg.text === "string" ? msg.text.trim() : "";
-  // Telegram often sends /link@BotUsername CODE when the command is chosen from the menu.
+
   const linkMatch = text.match(/^\/link(?:@\w+)?\s+([A-Fa-f0-9]+)\s*$/i);
   if (linkMatch) {
     const r = await tryLinkTelegramByCode(linkMatch[1], chatId);
     await sendTelegramMessage(chatId, r.message);
     return;
   }
+
   const user = await getOrCreateTelegramUser(chatId);
+
+  if (/^\/stop(?:@\w+)?$/i.test(text)) {
+    await prisma.user.update({ where: { id: user.id }, data: { reengagementOptOut: true } });
+    await sendTelegramMessage(chatId, "Daily nudges are off. Send /notify anytime to turn them back on.");
+    return;
+  }
+  if (/^\/notify(?:@\w+)?$/i.test(text)) {
+    await prisma.user.update({ where: { id: user.id }, data: { reengagementOptOut: false } });
+    await sendTelegramMessage(chatId, "Daily nudges are on. Send /stop to mute again.");
+    return;
+  }
+
+  if (/^\/start(?:@\w+)?\s*$/i.test(text) && !(msg.photo as unknown[])?.length) {
+    await sendTelegramMessage(chatId, user.telegramOnboardingSent ? "Send a food photo or question anytime." : ONBOARDING);
+    if (!user.telegramOnboardingSent) {
+      await prisma.user.update({ where: { id: user.id }, data: { telegramOnboardingSent: true } });
+    }
+    return;
+  }
+
+  text = text.replace(/^\/start(?:@\w+)?\s*/i, "").trim();
+
   const photos = msg.photo as { file_id: string }[] | undefined;
   let imageBase64: string | undefined;
   let mimeType: string | undefined;
@@ -71,6 +101,11 @@ export async function handleTelegramUpdate(update: Record<string, unknown>) {
   let barcode: string | undefined;
   const m = text.match(/\b(\d{8,14})\b/);
   if (m) barcode = m[1];
+
+  if (!user.telegramOnboardingSent && (text || imageBase64)) {
+    await prisma.user.update({ where: { id: user.id }, data: { telegramOnboardingSent: true } });
+    await sendTelegramMessage(chatId, ONBOARDING);
+  }
 
   if (!text && !imageBase64) return;
 
