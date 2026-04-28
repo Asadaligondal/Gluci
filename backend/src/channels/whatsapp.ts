@@ -78,6 +78,18 @@ export async function handleWhatsAppPayload(body: Record<string, unknown>) {
     await waSendText(from, r.message);
     return;
   }
+  // Help when user typed "link something" but the code must be hex digits only (from the app), one message, no extra text.
+  if (/^\/?link\s+\S+/i.test(text) && !/^\/?link\s+[A-Fa-f0-9]+\s*$/i.test(text)) {
+    try {
+      await waSendText(
+        from,
+        "That link code does not look valid. In WhatsApp send exactly: link PASTE_CODE — one space, then the 8 character code from the app (only 0-9 and a-f). No other words on the line.",
+      );
+    } catch {
+      /* if send fails, webhook still returns 200; check Render logs */
+    }
+    return;
+  }
 
   const user = await getOrCreateWhatsAppUser(from);
 
