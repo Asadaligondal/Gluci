@@ -6,6 +6,7 @@ import android.util.Base64
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import app.gluci.mvp.data.ApiModule
+import app.gluci.mvp.data.AnalyticsEventBody
 import app.gluci.mvp.data.AuthRequest
 import app.gluci.mvp.data.BillingStatusResponse
 import app.gluci.mvp.data.ChannelsResponse
@@ -41,6 +42,7 @@ data class UiMessage(
     val verdict: String? = null,
     val intent: String? = null,
     val shareCardUrl: String? = null,
+    val shareLandingUrl: String? = null,
     val outgoingStatus: OutgoingStatus = OutgoingStatus.None,
     val createdAtMs: Long? = null,
 )
@@ -104,6 +106,44 @@ class GluciViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     suspend fun getTokenOnce(): String? = store.token.first()
+
+    /**
+     * Loads profile and returns whether app onboarding is complete.
+     * On failure returns true (fail-open to home).
+     */
+    suspend fun fetchProfileGate(): Boolean {
+        val t = store.token.first() ?: return true
+        return try {
+            val p = api.getProfile("Bearer $t")
+            _profile.value = p
+            p.appOnboardingComplete
+        } catch (_: Exception) {
+            true
+        }
+    }
+
+    fun logAnalyticsEvent(name: String, properties: Map<String, Any>? = null) {
+        val t = _token.value ?: return
+        viewModelScope.launch {
+            try {
+                api.postAnalyticsEvent("Bearer $t", AnalyticsEventBody(name = name, properties = properties))
+            } catch (_: Exception) { /* non-blocking */ }
+        }
+    }
+
+    fun completeAppOnboarding(onDone: () -> Unit) {
+        val t = _token.value ?: return
+        viewModelScope.launch {
+            try {
+                api.patchProfile("Bearer $t", ProfilePatch(appOnboardingComplete = true))
+                refreshProfile()
+                logAnalyticsEvent("onboarding_complete", emptyMap())
+                onDone()
+            } catch (e: Exception) {
+                if (isUnauthorized(e)) handleUnauthorized()
+            }
+        }
+    }
 
     fun acknowledgeSessionExpired() {
         _sessionExpired.value = false
@@ -223,6 +263,7 @@ class GluciViewModel(app: Application) : AndroidViewModel(app) {
                 val url = r.url
                 if (url != null) {
                     _paywallUrl.value = url
+                    logAnalyticsEvent("checkout_open", null)
                     onUrl(url)
                 } else {
                     _error.value = "Could not start checkout"
@@ -447,6 +488,7 @@ class GluciViewModel(app: Application) : AndroidViewModel(app) {
                     verdict = out.verdict,
                     intent = out.intent,
                     shareCardUrl = out.shareCardUrl,
+                    shareLandingUrl = out.shareLandingUrl,
                 )
                 handlePaywall(out.paywall?.checkoutUrl)
                 refreshConversations()
@@ -501,6 +543,7 @@ class GluciViewModel(app: Application) : AndroidViewModel(app) {
                     verdict = out.verdict,
                     intent = out.intent,
                     shareCardUrl = out.shareCardUrl,
+                    shareLandingUrl = out.shareLandingUrl,
                 )
                 handlePaywall(out.paywall?.checkoutUrl)
                 refreshConversations()
@@ -542,6 +585,7 @@ class GluciViewModel(app: Application) : AndroidViewModel(app) {
                     verdict = out.verdict,
                     intent = out.intent,
                     shareCardUrl = out.shareCardUrl,
+                    shareLandingUrl = out.shareLandingUrl,
                 )
                 handlePaywall(out.paywall?.checkoutUrl)
                 refreshConversations()
@@ -568,8 +612,39 @@ class GluciViewModel(app: Application) : AndroidViewModel(app) {
         val t = _token.value ?: return
         viewModelScope.launch {
             try {
-                api.patchProfile("Bearer $t", ProfilePatch(goal = goal))
-                _profile.value = ProfileResponse(goal = goal)
+                api.patchProfile("Bearer $t", ProfilePatch(goal = goal.trim().takeIf { it.isNotEmpty() }))
+                refreshProfile()
+            } catch (e: Exception) {
+                if (isUnauthorized(e)) handleUnauthorized()
+            }
+        }
+    }
+
+    fun savePersonalization(
+        goal: String,
+        allergies: String,
+        preferences: String,
+        reengagementOptOut: Boolean,
+        frequencyDays: Int,
+    ) {
+        val t = _token.value ?: return
+        viewModelScope.launch {
+            try {
+                val dietary = buildMap {
+                    if (allergies.isNotBlank()) put("allergies", allergies.trim())
+                    if (preferences.isNotBlank()) put("preferences", preferences.trim())
+                }
+                api.patchProfile(
+                    "Bearer $t",
+                    ProfilePatch(
+                        goal = goal.trim().takeIf { it.isNotEmpty() },
+                        dietaryJson = dietary.ifEmpty { null },
+                        reengagementOptOut = reengagementOptOut,
+                        reengagementFrequencyDays = frequencyDays.coerceIn(1, 30),
+                    ),
+                )
+                refreshProfile()
+                logAnalyticsEvent("profile_update", mapOf("hasDietary" to dietary.isNotEmpty()))
             } catch (e: Exception) {
                 if (isUnauthorized(e)) handleUnauthorized()
             }
@@ -584,6 +659,7 @@ class GluciViewModel(app: Application) : AndroidViewModel(app) {
         verdict: String? = null,
         intent: String? = null,
         shareCardUrl: String? = null,
+        shareLandingUrl: String? = null,
     ) {
         val now = System.currentTimeMillis()
         val cur = _messages.value.toMutableList()
@@ -604,6 +680,7 @@ class GluciViewModel(app: Application) : AndroidViewModel(app) {
                 verdict = verdict,
                 intent = intent,
                 shareCardUrl = shareCardUrl,
+                shareLandingUrl = shareLandingUrl,
                 createdAtMs = now,
             ),
         )
@@ -616,6 +693,7 @@ class GluciViewModel(app: Application) : AndroidViewModel(app) {
         verdict: String?,
         intent: String?,
         shareCardUrl: String?,
+        shareLandingUrl: String? = null,
     ) {
         val now = System.currentTimeMillis()
         _messages.value = _messages.value + UiMessage(
@@ -625,6 +703,7 @@ class GluciViewModel(app: Application) : AndroidViewModel(app) {
             verdict = verdict,
             intent = intent,
             shareCardUrl = shareCardUrl,
+            shareLandingUrl = shareLandingUrl,
             createdAtMs = now,
         )
     }

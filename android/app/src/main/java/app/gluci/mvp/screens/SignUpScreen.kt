@@ -168,7 +168,7 @@ fun SignUpScreen(
                         Button(
                             onClick = {
                                 vm.signUp(email, pass) {
-                                    nav.navigate("home") {
+                                    nav.navigate("splash") {
                                         popUpTo("welcome") { inclusive = true }
                                     }
                                 }

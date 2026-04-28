@@ -33,6 +33,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -68,6 +69,10 @@ fun HomeScreen(
     val daily by vm.dailySummary.collectAsState()
     val weekly by vm.weeklySummary.collectAsState()
     val summariesLoading by vm.summariesLoading.collectAsState()
+
+    LaunchedEffect(Unit) {
+        vm.logAnalyticsEvent("app_open", emptyMap())
+    }
 
     SereneAuthBackground {
         Column(Modifier.fillMaxSize()) {

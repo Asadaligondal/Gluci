@@ -1,6 +1,7 @@
 package app.gluci.mvp.screens
 
 import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
@@ -111,7 +112,9 @@ fun ShareCardPreview(
 fun ShareCardSheet(
     url: String,
     captionText: String,
+    shareLandingUrl: String? = null,
     onDismiss: () -> Unit,
+    onCopyInviteLink: () -> Unit = {},
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val ctx = LocalContext.current
@@ -157,6 +160,22 @@ fun ShareCardSheet(
                 )
             }
             Spacer(Modifier.height(16.dp))
+            shareLandingUrl?.let { landing ->
+                OutlinedButton(
+                    onClick = {
+                        val cm =
+                            ctx.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                        cm.setPrimaryClip(ClipData.newPlainText("Gluci invite", landing))
+                        Toast.makeText(ctx, "Invite link copied", Toast.LENGTH_SHORT).show()
+                        onCopyInviteLink()
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(28.dp),
+                ) {
+                    Text("Copy invite link")
+                }
+                Spacer(Modifier.height(12.dp))
+            }
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(12.dp),

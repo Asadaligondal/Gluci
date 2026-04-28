@@ -61,6 +61,7 @@ data class ChatResponse(
     val topOrders: List<TopOrder>?,
     @SerializedName("shareCardUrl") val shareCardUrl: String?,
     @SerializedName("userImageUrl") val userImageUrl: String? = null,
+    @SerializedName("shareLandingUrl") val shareLandingUrl: String? = null,
     val paywall: PaywallInfo?,
 )
 
@@ -92,11 +93,21 @@ data class HistoryMessage(
 
 data class ProfilePatch(
     val goal: String? = null,
+    val dietaryJson: Map<String, String>? = null,
+    val reengagementOptOut: Boolean? = null,
+    val reengagementFrequencyDays: Int? = null,
+    val appOnboardingComplete: Boolean? = null,
 )
 
-/** GET /v1/profile/ — goal is the main field used in the app UI. */
+/** GET /v1/profile/ */
 data class ProfileResponse(
     val goal: String? = null,
+    val dietaryJson: Map<String, @JvmSuppressWildcards Any>? = null,
+    val memoryJson: Map<String, @JvmSuppressWildcards Any>? = null,
+    @SerializedName("reengagementOptOut") val reengagementOptOut: Boolean = false,
+    @SerializedName("reengagementFrequencyDays") val reengagementFrequencyDays: Int = 1,
+    @SerializedName("appOnboardingComplete") val appOnboardingComplete: Boolean = false,
+    @SerializedName("shareRef") val shareRef: String? = null,
 )
 
 data class ChannelsResponse(
@@ -257,4 +268,17 @@ interface GluciApi {
     suspend fun billingPortal(
         @Header("Authorization") authorization: String,
     ): PortalResponse
+
+    @POST("v1/analytics/event")
+    suspend fun postAnalyticsEvent(
+        @Header("Authorization") authorization: String,
+        @Body body: AnalyticsEventBody,
+    ): OkResponse
 }
+
+data class OkResponse(val ok: Boolean = true)
+
+data class AnalyticsEventBody(
+    val name: String,
+    val properties: Map<String, @JvmSuppressWildcards Any>? = null,
+)

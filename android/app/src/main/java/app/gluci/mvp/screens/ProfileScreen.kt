@@ -44,6 +44,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -382,6 +383,10 @@ private fun SubscriptionHeroCard(
 @Composable
 fun ProfileScreen(vm: GluciViewModel, nav: NavController) {
     var goal by remember { mutableStateOf("") }
+    var allergies by remember { mutableStateOf("") }
+    var preferences by remember { mutableStateOf("") }
+    var muteCheckins by remember { mutableStateOf(false) }
+    var freqDays by remember { mutableStateOf("1") }
     var goalSeededFromServer by remember { mutableStateOf(false) }
     val billing by vm.billing.collectAsState()
     val profile by vm.profile.collectAsState()
@@ -398,6 +403,13 @@ fun ProfileScreen(vm: GluciViewModel, nav: NavController) {
     LaunchedEffect(profile) {
         if (!goalSeededFromServer && profile != null) {
             goal = profile?.goal.orEmpty()
+            val d = profile?.dietaryJson
+            if (d != null) {
+                allergies = d["allergies"]?.toString().orEmpty()
+                preferences = d["preferences"]?.toString().orEmpty()
+            }
+            muteCheckins = profile?.reengagementOptOut == true
+            freqDays = (profile?.reengagementFrequencyDays ?: 1).toString()
             goalSeededFromServer = true
         }
     }
@@ -517,12 +529,104 @@ fun ProfileScreen(vm: GluciViewModel, nav: NavController) {
                         ),
                     )
                     Spacer(Modifier.height(18.dp))
+                    Text(
+                        "ALLERGIES & AVOID",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Spacer(Modifier.height(6.dp))
+                    OutlinedTextField(
+                        value = allergies,
+                        onValueChange = { allergies = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        minLines = 2,
+                        placeholder = { Text("e.g. peanuts, shellfish") },
+                        shape = GoalFieldShape,
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedContainerColor = Color.Transparent,
+                            unfocusedContainerColor = Color.Transparent,
+                            focusedBorderColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.85f),
+                            unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.65f),
+                        ),
+                    )
+                    Spacer(Modifier.height(14.dp))
+                    Text(
+                        "PREFERENCES",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Spacer(Modifier.height(6.dp))
+                    OutlinedTextField(
+                        value = preferences,
+                        onValueChange = { preferences = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        minLines = 2,
+                        placeholder = { Text("e.g. high protein, less added sugar") },
+                        shape = GoalFieldShape,
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedContainerColor = Color.Transparent,
+                            unfocusedContainerColor = Color.Transparent,
+                            focusedBorderColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.85f),
+                            unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.65f),
+                        ),
+                    )
+                    Spacer(Modifier.height(16.dp))
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Column(Modifier.weight(1f)) {
+                            Text(
+                                "Mute daily check-ins",
+                                style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Medium),
+                            )
+                            Text(
+                                "Turn off gentle re-engagement nudges (app + linked channels use server setting).",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        Switch(
+                            checked = muteCheckins,
+                            onCheckedChange = { muteCheckins = it },
+                        )
+                    }
+                    Spacer(Modifier.height(10.dp))
+                    Text(
+                        "MIN. DAYS BETWEEN CHECK-INS (1–30)",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Spacer(Modifier.height(6.dp))
+                    OutlinedTextField(
+                        value = freqDays,
+                        onValueChange = { v -> if (v.all { it.isDigit() } && v.length <= 2) freqDays = v },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        placeholder = { Text("1") },
+                        shape = GoalFieldShape,
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedContainerColor = Color.Transparent,
+                            unfocusedContainerColor = Color.Transparent,
+                            focusedBorderColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.85f),
+                            unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.65f),
+                        ),
+                    )
+                    Spacer(Modifier.height(18.dp))
                     Button(
                         onClick = {
-                            vm.setGoal(goal.trim())
+                            val f = freqDays.toIntOrNull()?.coerceIn(1, 30) ?: 1
+                            vm.savePersonalization(
+                                goal = goal.trim(),
+                                allergies = allergies,
+                                preferences = preferences,
+                                reengagementOptOut = muteCheckins,
+                                frequencyDays = f,
+                            )
                             nav.popBackStack()
                         },
-                        enabled = goal.isNotBlank(),
+                        enabled = true,
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(999.dp),
                         colors = ButtonDefaults.buttonColors(
@@ -534,7 +638,7 @@ fun ProfileScreen(vm: GluciViewModel, nav: NavController) {
                         elevation = ButtonDefaults.buttonElevation(defaultElevation = 0.dp),
                     ) {
                         Text(
-                            "Save goal",
+                            "Save settings",
                             style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold),
                             modifier = Modifier.padding(vertical = 8.dp),
                         )

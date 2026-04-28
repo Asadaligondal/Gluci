@@ -17,6 +17,7 @@ import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import app.gluci.mvp.screens.OnboardingScreen
 import androidx.navigation.navArgument
 import app.gluci.mvp.screens.BarcodeScreen
 import app.gluci.mvp.screens.ChatScreen
@@ -61,8 +62,15 @@ class MainActivity : ComponentActivity() {
                     composable("splash") {
                         LaunchedEffect(Unit) {
                             if (vm.getTokenOnce() != null) {
-                                nav.navigate("home") {
-                                    popUpTo("splash") { inclusive = true }
+                                val onboardingDone = vm.fetchProfileGate()
+                                if (onboardingDone) {
+                                    nav.navigate("home") {
+                                        popUpTo("splash") { inclusive = true }
+                                    }
+                                } else {
+                                    nav.navigate("onboarding") {
+                                        popUpTo("splash") { inclusive = true }
+                                    }
                                 }
                                 vm.onSessionStart()
                             } else {
@@ -78,6 +86,7 @@ class MainActivity : ComponentActivity() {
                     composable("welcome") { WelcomeScreen(nav) }
                     composable("signup") { SignUpScreen(vm, nav) }
                     composable("signin") { SignInScreen(vm, nav) }
+                    composable("onboarding") { OnboardingScreen(vm, nav) }
                     composable("home") { HomeScreen(vm, nav) }
                     composable(
                         "chat/{convId}",

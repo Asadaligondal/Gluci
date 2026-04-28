@@ -99,7 +99,7 @@ fun ChatScreen(
     val err by vm.error.collectAsState()
     var input by remember { mutableStateOf("") }
     val listState = rememberLazyListState()
-    var sharedCard by remember { mutableStateOf<Pair<String, String>?>(null) }
+    var sharedCard by remember { mutableStateOf<Triple<String, String, String?>?>(null) }
     var pendingImageUri by remember { mutableStateOf<Uri?>(null) }
 
     LaunchedEffect(conversationId) {
@@ -190,7 +190,7 @@ fun ChatScreen(
                 ) { i ->
                     ChatMessageBubble(
                         m = messages[i],
-                        onShareCardClick = { url ->
+                        onShareCardClick = { url, landing ->
                             val msg = messages[i]
                             val score = msg.score?.let { String.format("%.1f/10", it) }
                             val verdict = msg.verdict?.takeIf { it.isNotBlank() }
@@ -199,7 +199,7 @@ fun ChatScreen(
                                 if (verdict != null) append(" — $verdict")
                                 if (score != null) append(" ($score)")
                             }
-                            sharedCard = url to caption
+                            sharedCard = Triple(url, caption, landing)
                         },
                     )
                 }
@@ -270,11 +270,15 @@ fun ChatScreen(
             }
             }
         }
-        sharedCard?.let { (url, caption) ->
+        sharedCard?.let { (url, caption, landing) ->
             ShareCardSheet(
                 url = url,
                 captionText = caption,
+                shareLandingUrl = landing,
                 onDismiss = { sharedCard = null },
+                onCopyInviteLink = {
+                    vm.logAnalyticsEvent("share_link_copy", emptyMap())
+                },
             )
         }
     }
@@ -386,7 +390,7 @@ private fun WelcomeHero(
 @Composable
 private fun ChatMessageBubble(
     m: UiMessage,
-    onShareCardClick: (String) -> Unit = {},
+    onShareCardClick: (String, String?) -> Unit = { _, _ -> },
 ) {
     val isUser = m.role == "user"
     val time = GluciViewModel.formatMessageTime(m.createdAtMs)
@@ -479,7 +483,7 @@ private fun ChatMessageBubble(
                 if (!isUser && !m.shareCardUrl.isNullOrBlank()) {
                     ShareCardPreview(
                         url = m.shareCardUrl,
-                        onClick = { onShareCardClick(m.shareCardUrl) },
+                        onClick = { onShareCardClick(m.shareCardUrl!!, m.shareLandingUrl) },
                     )
                 }
             }
