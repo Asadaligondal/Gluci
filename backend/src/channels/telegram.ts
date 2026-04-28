@@ -7,6 +7,13 @@ import { tryLinkTelegramByCode } from "../services/linking.js";
 
 const TG_API = "https://api.telegram.org";
 
+function isImageDocument(doc: { file_id?: string; mime_type?: string; file_name?: string } | undefined): boolean {
+  if (!doc?.file_id) return false;
+  if (doc.mime_type?.startsWith("image/")) return true;
+  const n = (doc.file_name ?? "").toLowerCase();
+  return /\.(jpe?g|png|gif|webp|heic|heif|bmp)$/.test(n);
+}
+
 const ONBOARDING =
   "Welcome to Gluci — your friendly food coach *before* you eat.\n\n" +
   "Send a meal photo, ask about a restaurant or menu, or type a grocery barcode. " +
@@ -36,7 +43,19 @@ export async function sendTelegramMessage(chatId: string, text: string) {
   });
 }
 
-async function downloadTelegramFile(fileId: string): Promise<{ base64: string; mime: string } | null> {
+function mimeFromPathOrHint(filePath: string, mimeHint?: string): string {
+  if (mimeHint && mimeHint.startsWith("image/")) return mimeHint;
+  const p = filePath.toLowerCase();
+  if (p.endsWith(".png")) return "image/png";
+  if (p.endsWith(".webp")) return "image/webp";
+  if (p.endsWith(".gif")) return "image/gif";
+  return "image/jpeg";
+}
+
+async function downloadTelegramFile(
+  fileId: string,
+  mimeHint?: string,
+): Promise<{ base64: string; mime: string } | null> {
   const cfg = getConfig();
   const token = cfg.TELEGRAM_BOT_TOKEN!;
   const meta = (await fetch(`${TG_API}/bot${token}/getFile?file_id=${encodeURIComponent(fileId)}`).then((r) =>
@@ -45,7 +64,7 @@ async function downloadTelegramFile(fileId: string): Promise<{ base64: string; m
   if (!meta.ok || !meta.result?.file_path) return null;
   const url = `${TG_API}/file/bot${token}/${meta.result.file_path}`;
   const buf = await fetch(url).then((r) => r.arrayBuffer());
-  const mime = meta.result.file_path.endsWith(".png") ? "image/png" : "image/jpeg";
+  const mime = mimeFromPathOrHint(meta.result.file_path, mimeHint);
   return { base64: Buffer.from(buf).toString("base64"), mime };
 }
 
@@ -55,6 +74,7 @@ export async function handleTelegramUpdate(update: Record<string, unknown>) {
   const chat = msg.chat as { id: number };
   const chatId = String(chat.id);
   let text = typeof msg.text === "string" ? msg.text.trim() : "";
+  if (!text && typeof msg.caption === "string") text = msg.caption.trim();
 
   const linkMatch = text.match(/^\/link(?:@\w+)?\s+([A-Fa-f0-9]+)\s*$/i);
   if (linkMatch) {
@@ -76,7 +96,11 @@ export async function handleTelegramUpdate(update: Record<string, unknown>) {
     return;
   }
 
-  if (/^\/start(?:@\w+)?\s*$/i.test(text) && !(msg.photo as unknown[])?.length) {
+  if (
+    /^\/start(?:@\w+)?\s*$/i.test(text) &&
+    !(msg.photo as unknown[])?.length &&
+    !isImageDocument(msg.document as { file_id?: string; mime_type?: string; file_name?: string } | undefined)
+  ) {
     await sendTelegramMessage(chatId, user.telegramOnboardingSent ? "Send a food photo or question anytime." : ONBOARDING);
     if (!user.telegramOnboardingSent) {
       await prisma.user.update({ where: { id: user.id }, data: { telegramOnboardingSent: true } });
@@ -87,11 +111,18 @@ export async function handleTelegramUpdate(update: Record<string, unknown>) {
   text = text.replace(/^\/start(?:@\w+)?\s*/i, "").trim();
 
   const photos = msg.photo as { file_id: string }[] | undefined;
+  const document = msg.document as { file_id?: string; mime_type?: string; file_name?: string } | undefined;
   let imageBase64: string | undefined;
   let mimeType: string | undefined;
   if (photos?.length) {
     const best = photos[photos.length - 1];
     const dl = await downloadTelegramFile(best.file_id);
+    if (dl) {
+      imageBase64 = dl.base64;
+      mimeType = dl.mime;
+    }
+  } else if (document && isImageDocument(document)) {
+    const dl = await downloadTelegramFile(document.file_id!, document.mime_type);
     if (dl) {
       imageBase64 = dl.base64;
       mimeType = dl.mime;
@@ -107,6 +138,14 @@ export async function handleTelegramUpdate(update: Record<string, unknown>) {
     await sendTelegramMessage(chatId, ONBOARDING);
   }
 
+  const hadImagePayload = Boolean(photos?.length) || isImageDocument(document);
+  if (hadImagePayload && !imageBase64) {
+    await sendTelegramMessage(
+      chatId,
+      "I could not read that image. Try again, or send the picture as a photo (not a file) if the problem continues.",
+    );
+    return;
+  }
   if (!text && !imageBase64) return;
 
   const thread = await getOrCreateChannelConversation(user.id, "telegram");
