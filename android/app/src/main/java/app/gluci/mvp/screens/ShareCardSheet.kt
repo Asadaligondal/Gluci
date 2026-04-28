@@ -1,5 +1,6 @@
 package app.gluci.mvp.screens
 
+import android.content.ClipData
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
@@ -44,12 +45,13 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
+import app.gluci.mvp.data.ApiModule
 import coil.compose.AsyncImage
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import okhttp3.Request
 import java.io.File
-import java.net.URL
 
 /**
  * Small clickable preview rendered inside an assistant bubble whenever the
@@ -214,18 +216,27 @@ private suspend fun shareCardImage(
     captionText: String,
 ): Boolean {
     val cardsDir = File(ctx.cacheDir, "cards").apply { mkdirs() }
-    val safeName = url.substringAfterLast('/').ifBlank {
+    val raw = url.substringAfterLast('/').substringBefore('?').ifBlank {
         "gluci-card-${System.currentTimeMillis()}.png"
     }
+    val safeName = raw.replace(Regex("[^a-zA-Z0-9._-]"), "_").take(100)
+        .ifBlank { "gluci-card-${System.currentTimeMillis()}.png" }
     val file = File(cardsDir, safeName)
     return try {
         if (!file.exists() || file.length() == 0L) {
             withContext(Dispatchers.IO) {
-                URL(url).openStream().use { input ->
-                    file.outputStream().use { output -> input.copyTo(output) }
+                val client = ApiModule.coilOkHttpClient()
+                val req = Request.Builder().url(url).build()
+                client.newCall(req).execute().use { resp ->
+                    if (!resp.isSuccessful) error("HTTP ${resp.code}")
+                    val body = resp.body ?: error("empty body")
+                    body.byteStream().use { input ->
+                        file.outputStream().use { output -> input.copyTo(output) }
+                    }
                 }
             }
         }
+        if (file.length() == 0L) return false
         val uri: Uri = FileProvider.getUriForFile(
             ctx,
             "${ctx.packageName}.fileprovider",
@@ -235,10 +246,12 @@ private suspend fun shareCardImage(
             type = "image/png"
             putExtra(Intent.EXTRA_STREAM, uri)
             putExtra(Intent.EXTRA_TEXT, captionText)
+            clipData = ClipData.newUri(ctx.contentResolver, "Gluci card", uri)
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }
         val chooser = Intent.createChooser(send, "Share Gluci card").apply {
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }
         ctx.startActivity(chooser)
         true

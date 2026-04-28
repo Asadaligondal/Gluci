@@ -27,6 +27,12 @@ import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
+enum class OutgoingStatus {
+    None,
+    Sending,
+    Sent,
+}
+
 data class UiMessage(
     val role: String,
     val content: String,
@@ -35,6 +41,7 @@ data class UiMessage(
     val verdict: String? = null,
     val intent: String? = null,
     val shareCardUrl: String? = null,
+    val outgoingStatus: OutgoingStatus = OutgoingStatus.None,
     val createdAtMs: Long? = null,
 )
 
@@ -422,17 +429,24 @@ class GluciViewModel(app: Application) : AndroidViewModel(app) {
         val conv = _currentConversationId.value ?: return
         if (text.isBlank()) return
         viewModelScope.launch {
+            val trimmed = text.trim()
+            val now = System.currentTimeMillis()
+            _messages.value = _messages.value + UiMessage(
+                role = "user",
+                content = trimmed,
+                outgoingStatus = OutgoingStatus.Sending,
+                createdAtMs = now,
+            )
             _busy.value = true
             _error.value = null
             try {
                 val out = api.chat(
                     "Bearer $t",
-                    ChatRequest(conversationId = conv, text = text.trim()),
+                    ChatRequest(conversationId = conv, text = trimmed),
                 )
-                appendLocalTurn(
-                    user = text.trim(),
-                    assistant = out.reply,
-                    userImageUrl = null,
+                markLastSendingUserSent()
+                appendAssistantOnly(
+                    reply = out.reply,
                     score = out.score,
                     verdict = out.verdict,
                     intent = out.intent,
@@ -445,7 +459,10 @@ class GluciViewModel(app: Application) : AndroidViewModel(app) {
                 refreshSummaries()
             } catch (e: Exception) {
                 if (isUnauthorized(e)) handleUnauthorized()
-                else _error.value = e.message ?: "Chat failed"
+                else {
+                    removeLastOutgoingSending()
+                    _error.value = e.message ?: "Chat failed"
+                }
             } finally {
                 _busy.value = false
             }
@@ -456,6 +473,16 @@ class GluciViewModel(app: Application) : AndroidViewModel(app) {
         val t = _token.value ?: return
         val conv = _currentConversationId.value ?: return
         viewModelScope.launch {
+            val cap = caption?.trim().orEmpty()
+            val localUri = uri.toString()
+            val now = System.currentTimeMillis()
+            _messages.value = _messages.value + UiMessage(
+                role = "user",
+                content = cap,
+                imageUrl = localUri,
+                outgoingStatus = OutgoingStatus.Sending,
+                createdAtMs = now,
+            )
             _busy.value = true
             _error.value = null
             try {
@@ -469,10 +496,11 @@ class GluciViewModel(app: Application) : AndroidViewModel(app) {
                         mimeType = mime,
                     ),
                 )
-                appendLocalTurn(
-                    user = caption?.trim().orEmpty(),
-                    assistant = out.reply,
-                    userImageUrl = out.userImageUrl,
+                markLastSendingUserSent { last ->
+                    last.copy(imageUrl = out.userImageUrl ?: localUri)
+                }
+                appendAssistantOnly(
+                    reply = out.reply,
                     score = out.score,
                     verdict = out.verdict,
                     intent = out.intent,
@@ -485,7 +513,10 @@ class GluciViewModel(app: Application) : AndroidViewModel(app) {
                 refreshSummaries()
             } catch (e: Exception) {
                 if (isUnauthorized(e)) handleUnauthorized()
-                else _error.value = e.message ?: "Upload failed"
+                else {
+                    removeLastOutgoingSending()
+                    _error.value = e.message ?: "Upload failed"
+                }
             } finally {
                 _busy.value = false
             }
@@ -560,7 +591,15 @@ class GluciViewModel(app: Application) : AndroidViewModel(app) {
     ) {
         val now = System.currentTimeMillis()
         val cur = _messages.value.toMutableList()
-        cur.add(UiMessage("user", user, imageUrl = userImageUrl, createdAtMs = now))
+        cur.add(
+            UiMessage(
+                role = "user",
+                content = user,
+                imageUrl = userImageUrl,
+                outgoingStatus = OutgoingStatus.Sent,
+                createdAtMs = now,
+            ),
+        )
         cur.add(
             UiMessage(
                 role = "assistant",
@@ -572,6 +611,42 @@ class GluciViewModel(app: Application) : AndroidViewModel(app) {
                 createdAtMs = now,
             ),
         )
+        _messages.value = cur
+    }
+
+    private fun appendAssistantOnly(
+        reply: String,
+        score: Double?,
+        verdict: String?,
+        intent: String?,
+        shareCardUrl: String?,
+    ) {
+        val now = System.currentTimeMillis()
+        _messages.value = _messages.value + UiMessage(
+            role = "assistant",
+            content = reply,
+            score = score,
+            verdict = verdict,
+            intent = intent,
+            shareCardUrl = shareCardUrl,
+            createdAtMs = now,
+        )
+    }
+
+    private fun markLastSendingUserSent(transform: ((UiMessage) -> UiMessage)? = null) {
+        val cur = _messages.value.toMutableList()
+        val idx = cur.indexOfLast { it.role == "user" && it.outgoingStatus == OutgoingStatus.Sending }
+        if (idx >= 0) {
+            val updated = transform?.invoke(cur[idx]) ?: cur[idx]
+            cur[idx] = updated.copy(outgoingStatus = OutgoingStatus.Sent)
+            _messages.value = cur
+        }
+    }
+
+    private fun removeLastOutgoingSending() {
+        val cur = _messages.value.toMutableList()
+        val idx = cur.indexOfLast { it.role == "user" && it.outgoingStatus == OutgoingStatus.Sending }
+        if (idx >= 0) cur.removeAt(idx)
         _messages.value = cur
     }
 

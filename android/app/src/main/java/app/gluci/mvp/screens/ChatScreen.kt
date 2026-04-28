@@ -23,6 +23,7 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -35,16 +36,18 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.Chat
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Spa
 import androidx.compose.material.icons.outlined.AccountCircle
+import androidx.compose.material.icons.outlined.DoneAll
 import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material.icons.outlined.Inventory2
 import androidx.compose.material.icons.outlined.PhotoCamera
 import androidx.compose.material.icons.outlined.QrCodeScanner
+import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material.icons.outlined.Restaurant
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.Storefront
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -74,6 +77,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import app.gluci.mvp.vm.GluciViewModel
+import app.gluci.mvp.vm.OutgoingStatus
 import app.gluci.mvp.vm.UiMessage
 import coil.compose.AsyncImage
 
@@ -97,6 +101,7 @@ fun ChatScreen(
     var input by remember { mutableStateOf("") }
     val listState = rememberLazyListState()
     var sharedCard by remember { mutableStateOf<Pair<String, String>?>(null) }
+    var pendingImageUri by remember { mutableStateOf<Uri?>(null) }
 
     LaunchedEffect(conversationId) {
         vm.openConversation(conversationId) { }
@@ -105,7 +110,7 @@ fun ChatScreen(
     LaunchedEffect(messages.size, busy) {
         kotlinx.coroutines.delay(32)
         val welcomeCount = if (messages.isEmpty() && !busy) 1 else 0
-        val lastIndex = welcomeCount + messages.size - 1 + if (busy) 1 else 0
+        val lastIndex = welcomeCount + messages.size - 1
         val total = listState.layoutInfo.totalItemsCount
         if (total > 0 && lastIndex >= 0) {
             val target = lastIndex.coerceAtMost(total - 1).coerceAtLeast(0)
@@ -114,8 +119,7 @@ fun ChatScreen(
     }
 
     val pickImage = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
-        uri?.let { vm.sendImage(it, input.ifBlank { null }) }
-        input = ""
+        pendingImageUri = uri
     }
 
     BoxWithConstraints(Modifier.fillMaxSize().imePadding()) {
@@ -185,17 +189,6 @@ fun ChatScreen(
                         },
                     )
                 }
-                if (busy) {
-                    item {
-                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.padding(12.dp),
-                                color = SageMuted,
-                                strokeWidth = 2.dp,
-                            )
-                        }
-                    }
-                }
             }
             Column(
                 Modifier
@@ -220,18 +213,53 @@ fun ChatScreen(
                     },
                     onGrocery = { nav.navigate("barcode") },
                 )
+                pendingImageUri?.let { uri ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 20.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        AsyncImage(
+                            model = uri,
+                            contentDescription = "Photo to send",
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier
+                                .size(52.dp)
+                                .clip(RoundedCornerShape(10.dp)),
+                        )
+                        Text(
+                            "Add a note (optional), then send",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MutedCaption,
+                            modifier = Modifier
+                                .weight(1f)
+                                .padding(horizontal = 12.dp),
+                        )
+                        IconButton(onClick = { pendingImageUri = null }) {
+                            Icon(Icons.Filled.Close, contentDescription = "Remove photo", tint = MutedCaption)
+                        }
+                    }
+                }
                 ChatInputBar(
                     value = input,
                     onValueChange = { input = it },
                     onSend = {
-                        if (input.isNotBlank()) {
-                            vm.sendText(input.trim())
-                            input = ""
+                        when {
+                            pendingImageUri != null -> {
+                                vm.sendImage(pendingImageUri!!, input.ifBlank { null })
+                                pendingImageUri = null
+                                input = ""
+                            }
+                            input.isNotBlank() -> {
+                                vm.sendText(input.trim())
+                                input = ""
+                            }
                         }
                     },
                     onPickImage = { pickImage.launch("image/*") },
                     onCamera = { pickImage.launch("image/*") },
-                    enabledSend = input.isNotBlank() && !busy,
+                    enabledSend = !busy && (input.isNotBlank() || pendingImageUri != null),
                     busy = busy,
                 )
                 GluciBottomNav(
@@ -350,6 +378,9 @@ private fun ChatMessageBubble(
 ) {
     val isUser = m.role == "user"
     val time = GluciViewModel.formatMessageTime(m.createdAtMs)
+    val userImageDisplayUrl = remember(isUser, m.imageUrl) {
+        if (isUser && !m.imageUrl.isNullOrBlank()) m.imageUrl!!.reachableMediaUrl() else null
+    }
     Column(
         modifier = Modifier.fillMaxWidth(),
         horizontalAlignment = if (isUser) Alignment.End else Alignment.Start,
@@ -410,10 +441,9 @@ private fun ChatMessageBubble(
                         }
                     }
                 }
-                if (isUser && !m.imageUrl.isNullOrBlank()) {
-                    val imgUrl = remember(m.imageUrl) { m.imageUrl!!.reachableMediaUrl() }
+                if (userImageDisplayUrl != null) {
                     AsyncImage(
-                        model = imgUrl,
+                        model = userImageDisplayUrl,
                         contentDescription = "Your photo",
                         contentScale = ContentScale.Crop,
                         modifier = Modifier
@@ -442,13 +472,38 @@ private fun ChatMessageBubble(
                 }
             }
         }
-        Text(
-            text = if (isUser) "You${if (time.isNotEmpty()) " • $time" else ""}" else "Gluci${if (time.isNotEmpty()) " • $time" else ""}",
-            style = MaterialTheme.typography.labelSmall,
-            color = MutedCaption,
-            fontSize = 10.sp,
-            modifier = Modifier.padding(top = 4.dp, start = if (isUser) 0.dp else 8.dp, end = if (isUser) 8.dp else 0.dp),
-        )
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 4.dp, start = if (isUser) 0.dp else 8.dp, end = if (isUser) 8.dp else 0.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = if (isUser) Arrangement.End else Arrangement.Start,
+        ) {
+            Text(
+                text = if (isUser) "You${if (time.isNotEmpty()) " • $time" else ""}" else "Gluci${if (time.isNotEmpty()) " • $time" else ""}",
+                style = MaterialTheme.typography.labelSmall,
+                color = MutedCaption,
+                fontSize = 10.sp,
+            )
+            if (isUser && m.outgoingStatus != OutgoingStatus.None) {
+                Spacer(Modifier.width(4.dp))
+                when (m.outgoingStatus) {
+                    OutgoingStatus.Sending -> Icon(
+                        Icons.Outlined.Schedule,
+                        contentDescription = "Sending",
+                        tint = MutedCaption,
+                        modifier = Modifier.size(14.dp),
+                    )
+                    OutgoingStatus.Sent -> Icon(
+                        Icons.Outlined.DoneAll,
+                        contentDescription = "Sent",
+                        tint = SageMuted,
+                        modifier = Modifier.size(15.dp),
+                    )
+                    else -> {}
+                }
+            }
+        }
     }
 }
 

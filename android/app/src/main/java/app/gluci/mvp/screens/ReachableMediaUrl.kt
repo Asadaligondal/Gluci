@@ -2,11 +2,17 @@ package app.gluci.mvp.screens
 
 import app.gluci.mvp.BuildConfig
 
-/** Maps localhost / 127.0.0.1 to the API host (e.g. 10.0.2.2 for emulator). */
+/** Resolves relative / localhost URLs for Coil; leaves content:// and file:// unchanged. */
 fun String.reachableMediaUrl(): String {
-    val apiBase = BuildConfig.API_BASE
-    val host = runCatching { java.net.URI(apiBase).host }.getOrNull() ?: return this
-    return this
+    if (startsWith("content:") || startsWith("file:") || startsWith("android.resource:")) return this
+    val trimmedBase = BuildConfig.API_BASE.trim().trimEnd('/')
+    val s = when {
+        startsWith("http://") || startsWith("https://") -> this
+        startsWith("/") -> "$trimmedBase$this"
+        else -> this
+    }
+    val host = runCatching { java.net.URI(trimmedBase).host }.getOrNull() ?: return s
+    return s
         .replace("//localhost", "//$host")
         .replace("//127.0.0.1", "//$host")
 }

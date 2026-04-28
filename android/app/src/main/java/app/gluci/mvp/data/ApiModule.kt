@@ -40,6 +40,16 @@ object ApiModule {
         }
     }
 
+    /** Same DNS/timeouts as Retrofit — use for Coil so /static images load on flaky networks. */
+    fun coilOkHttpClient(): OkHttpClient {
+        return OkHttpClient.Builder()
+            .dns(buildResilientDns())
+            .connectTimeout(120, TimeUnit.SECONDS)
+            .readTimeout(120, TimeUnit.SECONDS)
+            .writeTimeout(120, TimeUnit.SECONDS)
+            .build()
+    }
+
     fun api(): GluciApi {
         val log = HttpLoggingInterceptor().apply {
             level = HttpLoggingInterceptor.Level.BASIC
