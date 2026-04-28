@@ -34,20 +34,19 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.ArrowUpward
-import androidx.compose.material.icons.filled.Chat
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Spa
-import androidx.compose.material.icons.outlined.AccountCircle
 import androidx.compose.material.icons.outlined.DoneAll
-import androidx.compose.material.icons.outlined.Image
-import androidx.compose.material.icons.outlined.Inventory2
+import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.outlined.PhotoCamera
 import androidx.compose.material.icons.outlined.QrCodeScanner
 import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material.icons.outlined.Restaurant
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.Storefront
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -165,7 +164,22 @@ fun ChatScreen(
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 if (messages.isEmpty() && !busy) {
-                    item { WelcomeHero() }
+                    item {
+                        WelcomeHero(
+                            onPrefillMeal = {
+                                input =
+                                    "I want to check a meal. Should I eat this? (I'll send a photo next.)"
+                            },
+                            onPrefillRestaurant = {
+                                input =
+                                    "Help me pick the best ~3 things to order for stable glucose. Restaurant name:"
+                            },
+                            onPrefillGrocery = {
+                                input =
+                                    "Help me rate this grocery item. Barcode or description:"
+                            },
+                        )
+                    }
                 }
                 items(
                     count = messages.size,
@@ -204,15 +218,6 @@ fun ChatScreen(
                     )
                     .padding(bottom = 8.dp),
             ) {
-                QuickActionPills(
-                    onCheckMeal = {
-                        vm.sendText("I want to check a meal. Should I eat this? (I'll send a photo next.)")
-                    },
-                    onRestaurant = {
-                        vm.sendText("Help me pick the best ~3 things to order for stable glucose. Restaurant name:")
-                    },
-                    onGrocery = { nav.navigate("barcode") },
-                )
                 pendingImageUri?.let { uri ->
                     Row(
                         modifier = Modifier
@@ -257,18 +262,10 @@ fun ChatScreen(
                             }
                         }
                     },
-                    onPickImage = { pickImage.launch("image/*") },
-                    onCamera = { pickImage.launch("image/*") },
+                    onCameraOrGallery = { pickImage.launch("image/*") },
+                    onBarcode = { nav.navigate("barcode") },
                     enabledSend = !busy && (input.isNotBlank() || pendingImageUri != null),
                     busy = busy,
-                )
-                GluciBottomNav(
-                    onChat = { /* already here */ },
-                    onRestaurant = {
-                        vm.sendText("Help me pick the best ~3 things to order for stable glucose. Restaurant name:")
-                    },
-                    onInventory = { nav.navigate("barcode") },
-                    onAccount = { nav.navigate("profile") },
                 )
             }
             }
@@ -325,7 +322,11 @@ private fun ChatTopBar(
 }
 
 @Composable
-private fun WelcomeHero() {
+private fun WelcomeHero(
+    onPrefillMeal: () -> Unit,
+    onPrefillRestaurant: () -> Unit,
+    onPrefillGrocery: () -> Unit,
+) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -368,6 +369,17 @@ private fun WelcomeHero() {
             modifier = Modifier.padding(top = 4.dp, start = 24.dp, end = 24.dp),
             textAlign = TextAlign.Center,
         )
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState())
+                .padding(top = 16.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
+        ) {
+            QuickPill("Check a meal", Icons.Outlined.Restaurant, onPrefillMeal)
+            QuickPill("Restaurant", Icons.Outlined.Storefront, onPrefillRestaurant)
+            QuickPill("Grocery / barcode", Icons.Outlined.QrCodeScanner, onPrefillGrocery)
+        }
     }
 }
 
@@ -558,25 +570,6 @@ private fun InsightCell(modifier: Modifier = Modifier, label: String, value: Str
 }
 
 @Composable
-private fun QuickActionPills(
-    onCheckMeal: () -> Unit,
-    onRestaurant: () -> Unit,
-    onGrocery: () -> Unit,
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .horizontalScroll(rememberScrollState())
-            .padding(horizontal = 20.dp, vertical = 8.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
-    ) {
-        QuickPill("Check a meal", Icons.Outlined.Restaurant, onCheckMeal)
-        QuickPill("Choose a restaurant", Icons.Outlined.Storefront, onRestaurant)
-        QuickPill("Scan grocery", Icons.Outlined.QrCodeScanner, onGrocery)
-    }
-}
-
-@Composable
 private fun QuickPill(
     label: String,
     icon: androidx.compose.ui.graphics.vector.ImageVector,
@@ -605,11 +598,12 @@ private fun ChatInputBar(
     value: String,
     onValueChange: (String) -> Unit,
     onSend: () -> Unit,
-    onPickImage: () -> Unit,
-    onCamera: () -> Unit,
+    onCameraOrGallery: () -> Unit,
+    onBarcode: () -> Unit,
     enabledSend: Boolean,
     busy: Boolean,
 ) {
+    var attachMenuExpanded by remember { mutableStateOf(false) }
     Surface(
         modifier = Modifier
             .fillMaxWidth()
@@ -623,11 +617,38 @@ private fun ChatInputBar(
             modifier = Modifier.padding(4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            IconButton(onClick = onPickImage, enabled = !busy) {
-                Icon(Icons.Outlined.Image, contentDescription = "Attach image", tint = MutedCaption)
-            }
-            IconButton(onClick = onCamera, enabled = !busy) {
-                Icon(Icons.Outlined.PhotoCamera, contentDescription = "Camera", tint = MutedCaption)
+            Box {
+                IconButton(
+                    onClick = { attachMenuExpanded = true },
+                    enabled = !busy,
+                ) {
+                    Icon(Icons.Outlined.MoreVert, contentDescription = "Camera or barcode", tint = MutedCaption)
+                }
+                DropdownMenu(
+                    expanded = attachMenuExpanded,
+                    onDismissRequest = { attachMenuExpanded = false },
+                ) {
+                    DropdownMenuItem(
+                        text = { Text("Camera / photo") },
+                        onClick = {
+                            attachMenuExpanded = false
+                            onCameraOrGallery()
+                        },
+                        leadingIcon = {
+                            Icon(Icons.Outlined.PhotoCamera, contentDescription = null)
+                        },
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Scan barcode") },
+                        onClick = {
+                            attachMenuExpanded = false
+                            onBarcode()
+                        },
+                        leadingIcon = {
+                            Icon(Icons.Outlined.QrCodeScanner, contentDescription = null)
+                        },
+                    )
+                }
             }
             OutlinedTextField(
                 value = value,
@@ -672,59 +693,3 @@ private fun ChatInputBar(
     }
 }
 
-@Composable
-private fun GluciBottomNav(
-    onChat: () -> Unit,
-    onRestaurant: () -> Unit,
-    onInventory: () -> Unit,
-    onAccount: () -> Unit,
-) {
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(topStart = 32.dp, topEnd = 32.dp),
-        color = Color.White.copy(alpha = 0.92f),
-        shadowElevation = 12.dp,
-        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.35f)),
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 24.dp, vertical = 12.dp),
-            horizontalArrangement = Arrangement.SpaceAround,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            BottomNavItem(Icons.Filled.Chat, selected = true, onClick = onChat)
-            BottomNavItem(Icons.Outlined.Restaurant, selected = false, onClick = onRestaurant)
-            BottomNavItem(Icons.Outlined.Inventory2, selected = false, onClick = onInventory)
-            BottomNavItem(Icons.Outlined.AccountCircle, selected = false, onClick = onAccount)
-        }
-    }
-}
-
-@Composable
-private fun BottomNavItem(
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    selected: Boolean,
-    onClick: () -> Unit,
-) {
-    val bg = if (selected) {
-        Brush.linearGradient(listOf(SageMuted.copy(alpha = 0.22f), SageMuted.copy(alpha = 0.06f)))
-    } else {
-        Brush.linearGradient(listOf(Color.Transparent, Color.Transparent))
-    }
-    IconButton(onClick = onClick) {
-        Box(
-            modifier = Modifier
-                .size(44.dp)
-                .clip(CircleShape)
-                .background(bg),
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = null,
-                tint = if (selected) SageMuted else MutedCaption,
-            )
-        }
-    }
-}

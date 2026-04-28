@@ -23,10 +23,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material.icons.outlined.DateRange
-import androidx.compose.material.icons.outlined.QrCodeScanner
-import androidx.compose.material.icons.outlined.Restaurant
+import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Settings
-import androidx.compose.material.icons.outlined.Storefront
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -115,7 +113,7 @@ fun HomeScreen(
                             color = MaterialTheme.colorScheme.primary,
                         )
                         Text(
-                            "Pick a shortcut or jump into a thread below.",
+                            "Start a new chat or open one below — meal, restaurant, and grocery in any thread.",
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.padding(top = 4.dp),
@@ -127,39 +125,6 @@ fun HomeScreen(
                         loading = summariesLoading,
                         daily = daily,
                         weekly = weekly,
-                    )
-                }
-                item {
-                    HomeQuickRow(
-                        icon = Icons.Outlined.Restaurant,
-                        label = "Check a meal",
-                        onClick = {
-                            vm.newChatWithQuickHint(
-                                "I want to check a meal. Should I eat this? (I'll send a photo next.)",
-                            ) { id -> nav.navigate("chat/$id") }
-                        },
-                    )
-                }
-                item {
-                    HomeQuickRow(
-                        icon = Icons.Outlined.Storefront,
-                        label = "Restaurant",
-                        onClick = {
-                            vm.newChatWithQuickHint(
-                                "Help me pick the best ~3 things to order for stable glucose. Restaurant name:",
-                            ) { id -> nav.navigate("chat/$id") }
-                        },
-                    )
-                }
-                item {
-                    HomeQuickRow(
-                        icon = Icons.Outlined.QrCodeScanner,
-                        label = "Grocery / barcode",
-                        onClick = {
-                            vm.newChatWithQuickHint(
-                                "Help me rate this grocery item. I'll scan the barcode or describe it.",
-                            ) { id -> nav.navigate("chat/$id") }
-                        },
                     )
                 }
                 if (convs.isNotEmpty()) {
@@ -175,12 +140,13 @@ fun HomeScreen(
                         HomeChatRow(
                             title = c.title,
                             onClick = { nav.navigate("chat/${c.id}") },
+                            onDelete = { vm.deleteConversation(c.id) },
                         )
                     }
                 } else {
                     item {
                         Text(
-                            "No threads yet — tap + or a shortcut to start.",
+                            "No threads yet — tap + to start.",
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.padding(top = 16.dp),
@@ -282,46 +248,10 @@ private fun HomeTopBar(
 }
 
 @Composable
-private fun HomeQuickRow(
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    label: String,
-    onClick: () -> Unit,
-) {
-    val outline = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
-    val cardFill = Color(0xFFF8F9F8)
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .heightIn(min = 58.dp)
-            .clip(ShortcutCardShape)
-            .background(cardFill)
-            .border(width = 1.dp, color = outline, shape = ShortcutCardShape)
-            .clickable(onClick = onClick)
-            .padding(horizontal = 18.dp, vertical = 16.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(16.dp),
-    ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = null,
-            tint = HomeSageMuted,
-            modifier = Modifier.size(24.dp),
-        )
-        Text(
-            text = label,
-            style = MaterialTheme.typography.bodyLarge.copy(background = Color.Unspecified),
-            color = MaterialTheme.colorScheme.onSurface,
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.weight(1f),
-        )
-    }
-}
-
-@Composable
 private fun HomeChatRow(
     title: String,
     onClick: () -> Unit,
+    onDelete: () -> Unit,
 ) {
     val outline = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)
     val cardFill = Color(0xFFFDFDFC)
@@ -332,27 +262,42 @@ private fun HomeChatRow(
             .clip(ChatCardShape)
             .background(cardFill)
             .border(width = 1.dp, color = outline, shape = ChatCardShape)
-            .clickable(onClick = onClick)
-            .padding(horizontal = 16.dp, vertical = 14.dp),
+            .padding(horizontal = 4.dp, vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(
-            text = title,
-            style = MaterialTheme.typography.bodyLarge.copy(background = Color.Unspecified),
-            color = MaterialTheme.colorScheme.onSurface,
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.weight(1f),
-        )
-        Text(
-            text = "›",
-            style = MaterialTheme.typography.titleMedium.copy(
-                fontWeight = FontWeight.Medium,
-                background = Color.Unspecified,
-            ),
-            color = HomeSageMuted.copy(alpha = 0.5f),
-            modifier = Modifier.padding(start = 10.dp),
-        )
+        Row(
+            modifier = Modifier
+                .weight(1f)
+                .clip(ChatCardShape)
+                .clickable(onClick = onClick)
+                .padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.bodyLarge.copy(background = Color.Unspecified),
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f),
+            )
+            Text(
+                text = "›",
+                style = MaterialTheme.typography.titleMedium.copy(
+                    fontWeight = FontWeight.Medium,
+                    background = Color.Unspecified,
+                ),
+                color = HomeSageMuted.copy(alpha = 0.5f),
+                modifier = Modifier.padding(start = 10.dp),
+            )
+        }
+        IconButton(onClick = onDelete) {
+            Icon(
+                Icons.Outlined.Delete,
+                contentDescription = "Delete chat",
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
     }
 }
 

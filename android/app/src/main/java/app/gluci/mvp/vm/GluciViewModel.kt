@@ -97,8 +97,6 @@ class GluciViewModel(app: Application) : AndroidViewModel(app) {
     private val _sessionExpired = MutableStateFlow(false)
     val sessionExpired: StateFlow<Boolean> = _sessionExpired.asStateFlow()
 
-    var pendingFirstMessage: String? = null
-
     init {
         viewModelScope.launch {
             store.token.collect { _token.value = it }
@@ -370,6 +368,24 @@ class GluciViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    fun deleteConversation(id: String) {
+        val t = _token.value ?: return
+        viewModelScope.launch {
+            _error.value = null
+            try {
+                api.deleteConversation("Bearer $t", id)
+                if (_currentConversationId.value == id) {
+                    _currentConversationId.value = null
+                    _messages.value = emptyList()
+                }
+                refreshConversations()
+            } catch (e: Exception) {
+                if (isUnauthorized(e)) handleUnauthorized()
+                else _error.value = e.message ?: "Could not delete chat"
+            }
+        }
+    }
+
     fun openConversation(
         id: String,
         onReady: () -> Unit,
@@ -393,11 +409,6 @@ class GluciViewModel(app: Application) : AndroidViewModel(app) {
                     )
                 }
                 onReady()
-                val p = pendingFirstMessage
-                if (p != null) {
-                    pendingFirstMessage = null
-                    sendText(p)
-                }
             } catch (e: Exception) {
                 if (isUnauthorized(e)) handleUnauthorized()
                 else _error.value = e.message ?: "Load failed"
@@ -405,21 +416,6 @@ class GluciViewModel(app: Application) : AndroidViewModel(app) {
                 _busy.value = false
             }
         }
-    }
-
-    fun newChatWithQuickHint(
-        hint: String,
-        onCreated: (String) -> Unit,
-    ) {
-        pendingFirstMessage = hint
-        createConversation(
-            title = when {
-                hint.contains("restaurant", true) -> "Restaurant"
-                hint.contains("barcode", true) || hint.contains("grocery", true) -> "Grocery"
-                else -> "Check a meal"
-            },
-            onCreated = onCreated,
-        )
     }
 
     fun sendText(
