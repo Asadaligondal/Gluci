@@ -8,70 +8,84 @@ const DATA_DIR = path.join(process.cwd(), "data", "cards");
 
 export type CurvePoint = { minute: number; mg_dl: number };
 
-/** Generates SVG markup for the Instagram-style pink/green glucose curve plot (standalone raster target). */
+const CURVE_MAX_Y = 80;
+const CURVE_THRESHOLD = 30;
+
+/** Light-theme curve panel: pink top / green bottom, dashed +30 line, filled “mountain” shape. */
 export function generateCurveSVG(points: CurvePoint[], width: number, height: number): string {
+  const threshY = height * (1 - CURVE_THRESHOLD / CURVE_MAX_Y);
+  const peak = points.length ? Math.max(...points.map((p) => p.mg_dl)) : 0;
+  const color = peak < 25 ? "#2E7D32" : peak < 50 ? "#E65100" : "#1A1A1A";
+
+  const zonePink = `<rect width="${width}" height="${threshY}" fill="#FFDDE1"/>`;
+  const zoneGreen = `<rect y="${threshY}" width="${width}" height="${height - threshY}" fill="#D6F0E0"/>`;
+  const threshLine = `<line x1="0" y1="${threshY}" x2="${width}" y2="${threshY}" stroke="#BDBDBD" stroke-width="1" stroke-dasharray="8,4"/>`;
+
   if (!points.length) {
-    return `<svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">
-      <rect width="100%" height="100%" fill="#fafafa"/>
-      <text x="${width / 2}" y="${height / 2}" font-family="sans-serif" font-size="22" fill="#bdbdbd" text-anchor="middle">No curve data</text>
-    </svg>`;
+    return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}">
+    ${zonePink}
+    ${zoneGreen}
+    ${threshLine}
+    <text x="8" y="20" font-family="sans-serif" font-size="18" fill="#9E9E9E">+60</text>
+    <text x="8" y="${Math.min(36, threshY - 8)}" font-family="sans-serif" font-size="18" fill="#9E9E9E">spike +30</text>
+    <text x="8" y="${height - 28}" font-family="sans-serif" font-size="18" fill="#9E9E9E">baseline</text>
+    <text x="8" y="${height - 8}" font-family="sans-serif" font-size="18" fill="#9E9E9E">eating time</text>
+    <text x="${width}" y="${height - 8}" text-anchor="end" font-family="sans-serif" font-size="18" fill="#9E9E9E">+ 2 hours</text>
+  </svg>`;
   }
 
-  const peak = Math.max(...points.map((p) => p.mg_dl), 1);
-  const maxMg = Math.max(peak, 60);
-  const curveColor = curveStrokeFromPeak(peak);
+  const pts = points.map((p) => ({
+    x: (p.minute / 120) * width,
+    y: height - (p.mg_dl / CURVE_MAX_Y) * height,
+  }));
 
-  const thresholdY = height - (30 / maxMg) * height;
-
-  function xy(minute: number, mg: number): [number, number] {
-    const x = (minute / 120) * width;
-    const y = height - (mg / maxMg) * height;
-    return [x, y];
+  let d = `M ${pts[0].x} ${height} L ${pts[0].x} ${pts[0].y}`;
+  for (let i = 1; i < pts.length; i++) {
+    const prev = pts[i - 1];
+    const curr = pts[i];
+    const cp1x = prev.x + (curr.x - prev.x) * 0.5;
+    const cp2x = curr.x - (curr.x - prev.x) * 0.5;
+    d += ` C ${cp1x} ${prev.y} ${cp2x} ${curr.y} ${curr.x} ${curr.y}`;
   }
+  d += ` L ${pts[pts.length - 1].x} ${height} Z`;
 
-  const pts = points.map((p) => xy(p.minute, p.mg_dl));
-
-  let curvePath = "";
-  if (pts.length >= 2) {
-    curvePath = `M ${pts[0][0].toFixed(2)} ${pts[0][1].toFixed(2)}`;
-    for (let i = 1; i < pts.length; i++) {
-      const prev = pts[i - 1];
-      const curr = pts[i];
-      const cp1x = prev[0] + (curr[0] - prev[0]) * 0.5;
-      const cp1y = prev[1];
-      const cp2x = curr[0] - (curr[0] - prev[0]) * 0.5;
-      const cp2y = curr[1];
-      curvePath += ` C ${cp1x.toFixed(2)} ${cp1y.toFixed(2)}, ${cp2x.toFixed(2)} ${cp2y.toFixed(2)}, ${curr[0].toFixed(2)} ${curr[1].toFixed(2)}`;
-    }
-  }
-
-  let areaPath = curvePath;
-  if (pts.length >= 2) {
-    const last = pts[pts.length - 1];
-    const first = pts[0];
-    areaPath += ` L ${last[0].toFixed(2)} ${height.toFixed(2)} L ${first[0].toFixed(2)} ${height.toFixed(2)} Z`;
-  }
-
-  const peakIdx = points.reduce((best, p, i, arr) => (p.mg_dl > arr[best].mg_dl ? i : best), 0);
-  const pk = pts[peakIdx];
-
-  return `<svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">
-  <rect x="0" y="${thresholdY.toFixed(2)}" width="${width}" height="${(height - thresholdY).toFixed(2)}" fill="#E8F5E9"/>
-  <rect x="0" y="0" width="${width}" height="${thresholdY.toFixed(2)}" fill="#FFEBEE"/>
-  <line x1="0" y1="${thresholdY.toFixed(2)}" x2="${width}" y2="${thresholdY.toFixed(2)}"
-        stroke="#BDBDBD" stroke-width="1" stroke-dasharray="4,4"/>
-  ${pts.length >= 2 ? `<path d="${areaPath}" fill="${curveColor}" fill-opacity="0.25"/>` : ""}
-  ${pts.length >= 2 ? `<path d="${curvePath}" fill="none" stroke="${curveColor}" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>` : ""}
-  ${pts.length >= 2 ? `<circle cx="${pk[0].toFixed(2)}" cy="${pk[1].toFixed(2)}" r="5" fill="${curveColor}"/>` : ""}
-</svg>`;
+  const lblSpikeY = threshY > 22 ? threshY - 6 : 22;
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}">
+    ${zonePink}
+    ${zoneGreen}
+    ${threshLine}
+    <path d="${d}" fill="${color}"/>
+    <text x="8" y="20" font-family="sans-serif" font-size="18" fill="#9E9E9E">+60</text>
+    <text x="8" y="${lblSpikeY}" font-family="sans-serif" font-size="18" fill="#9E9E9E">spike +30</text>
+    <text x="8" y="${height - 28}" font-family="sans-serif" font-size="18" fill="#9E9E9E">baseline</text>
+    <text x="8" y="${height - 8}" font-family="sans-serif" font-size="18" fill="#9E9E9E">eating time</text>
+    <text x="${width}" y="${height - 8}" text-anchor="end" font-family="sans-serif" font-size="18" fill="#9E9E9E">+ 2 hours</text>
+  </svg>`;
 }
 
-function curveStrokeFromPeak(peak: number): string {
-  if (peak < 30) return "#4CAF50";
-  if (peak <= 60) return "#FF6F00";
-  return "#1A1A1A";
+function scoreDisplayColor(score: number): string {
+  if (score < 5) return "#F44336";
+  if (score <= 7) return "#FF9800";
+  return "#4CAF50";
 }
 
+function verdictPillLight(verdict: string): { bg: string; fg: string; stroke: string } {
+  const v = verdict.trim().toLowerCase();
+  if (v.includes("avoid")) return { bg: "#FFEBEE", fg: "#C62828", stroke: "#FFCDD2" };
+  if (v.includes("modify")) return { bg: "#FFF3E0", fg: "#E65100", stroke: "#FFE0B2" };
+  if (v.includes("eat")) return { bg: "#E8F5E9", fg: "#2E7D32", stroke: "#C8E6C9" };
+  return { bg: "#F5F5F5", fg: "#424242", stroke: "#E0E0E0" };
+}
+
+function verdictBadgeLabel(verdict: string): string {
+  const v = verdict.trim().toLowerCase();
+  if (v.includes("avoid")) return "AVOID";
+  if (v.includes("modify")) return "MODIFY";
+  if (v.includes("eat")) return "EAT";
+  return verdict.slice(0, 14).toUpperCase();
+}
+
+/** Instagram portrait 1080×1350, all light / white styling. */
 export async function renderShareCard(params: {
   score: number;
   verdict: string;
@@ -87,97 +101,95 @@ export async function renderShareCard(params: {
   const absolutePath = path.join(DATA_DIR, filename);
 
   const W = 1080;
-  const H = 1920;
-  const scoreStr = `${params.score.toFixed(1)}/10`;
-  const foodTitle = escapeXml((params.foodName ?? "Your meal").slice(0, 120));
+  const H = 1350;
 
   const hasHero = Boolean(params.heroImagePath && fs.existsSync(params.heroImagePath!));
 
-  let bgBuf: Buffer;
+  let baseBuf = await sharp({
+    create: { width: W, height: H, channels: 3, background: { r: 255, g: 255, b: 255 } },
+  })
+    .png()
+    .toBuffer();
+
   if (hasHero) {
-    bgBuf = await sharp(params.heroImagePath!)
+    const heroStrip = await sharp(params.heroImagePath!)
       .rotate()
-      .resize(W, H, { fit: "cover", position: "center" })
-      .blur(14)
-      .modulate({ saturation: 0.88 })
-      .ensureAlpha()
+      .resize(W, 540, { fit: "cover", position: "center" })
       .png()
       .toBuffer();
-  } else {
-    bgBuf = await sharp({
-      create: { width: W, height: H, channels: 3, background: { r: 245, g: 248, b: 246 } },
-    })
+
+    const fadeSvg = `<svg width="${W}" height="540" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <linearGradient id="fade" gradientUnits="userSpaceOnUse" x1="0" y1="440" x2="0" y2="540">
+          <stop offset="0%" stop-color="#ffffff" stop-opacity="0"/>
+          <stop offset="100%" stop-color="#ffffff" stop-opacity="1"/>
+        </linearGradient>
+      </defs>
+      <rect x="0" y="440" width="${W}" height="100" fill="url(#fade)"/>
+    </svg>`;
+    const fadeBuf = await sharp(Buffer.from(fadeSvg)).png().toBuffer();
+
+    baseBuf = await sharp(baseBuf)
+      .composite([
+        { input: heroStrip, left: 0, top: 0 },
+        { input: fadeBuf, left: 0, top: 0 },
+      ])
       .png()
       .toBuffer();
   }
 
-  const cardW = Math.round(W * 0.82);
-  const cardLeft = Math.floor((W - cardW) / 2);
-  const cardTop = 160;
-  const cardH = 1380;
-
-  const vc = verdictBadgeColors(params.verdict);
+  const foodTitle = escapeXml((params.foodName ?? "Your meal").slice(0, 90));
+  const scoreNum = escapeXml(params.score.toFixed(1));
+  const scoreCol = scoreDisplayColor(params.score);
+  const vp = verdictPillLight(params.verdict);
   const badgeVerdict = verdictBadgeLabel(params.verdict);
+  const insightHtml = escapeHtml(params.insight.slice(0, 700));
+  const footer = escapeXml(params.subtitle ?? "gluci.app");
 
-  const curve = params.glucoseCurve ?? [];
-  const plotW = cardW - 120;
-  const plotH = 340;
-  const curveSvgStr = generateCurveSVG(curve, plotW, plotH);
-  const curveBuf = await sharp(Buffer.from(curveSvgStr)).png().toBuffer();
-
-  const insightShort = escapeHtml(params.insight.slice(0, 520));
-
-  const innerSvg = `
-  <svg width="${cardW}" height="${cardH}" xmlns="http://www.w3.org/2000/svg">
-    <defs>
-      <filter id="cardShadow" x="-15%" y="-15%" width="130%" height="130%">
-        <feDropShadow dx="0" dy="14" stdDeviation="18" flood-opacity="0.22"/>
-      </filter>
-    </defs>
-    <rect x="0" y="0" width="${cardW}" height="${cardH}" rx="28" ry="28" fill="#ffffff" filter="url(#cardShadow)"/>
-    <text x="${cardW / 2}" y="76" font-family="sans-serif" font-size="44" fill="#2e7d32" text-anchor="middle" font-weight="bold">Gluci</text>
-    <text x="${cardW / 2}" y="138" font-family="sans-serif" font-size="34" fill="#111111" text-anchor="middle">${foodTitle}</text>
-    <text x="${cardW / 2}" y="248" font-family="sans-serif" font-size="104" fill="#111111" text-anchor="middle" font-weight="bold">${escapeXml(scoreStr)}</text>
-    <rect x="${(cardW - 300) / 2}" y="278" rx="30" ry="30" width="300" height="60" fill="${vc.bg}" stroke="${vc.stroke}" stroke-width="2"/>
-    <text x="${cardW / 2}" y="322" font-family="sans-serif" font-size="30" fill="${vc.fg}" text-anchor="middle" font-weight="bold">${escapeXml(badgeVerdict)}</text>
-    <rect x="60" y="380" width="${plotW}" height="${plotH}" rx="18" ry="18" fill="#fafafa"/>
-    <foreignObject x="52" y="780" width="${cardW - 104}" height="520">
-      <div xmlns="http://www.w3.org/1999/xhtml" style="color:#333;font-family:sans-serif;font-size:30px;line-height:1.35;">
-        ${insightShort}
+  const mainSvg = `<svg width="${W}" height="${H}" xmlns="http://www.w3.org/2000/svg">
+    <text x="540" y="580" text-anchor="middle" font-family="sans-serif" font-size="48" font-weight="bold" fill="#E91E8C">Gluci</text>
+    <text x="540" y="650" text-anchor="middle" font-family="sans-serif" font-size="36" fill="#1A1A1A">${foodTitle}</text>
+    <text x="540" y="780" text-anchor="middle" font-family="sans-serif">
+      <tspan font-size="96" font-weight="bold" fill="${scoreCol}">${scoreNum}</tspan><tspan font-size="48" fill="#757575"> /10</tspan>
+    </text>
+    <rect x="440" y="850" width="200" height="60" rx="30" ry="30" fill="${vp.bg}" stroke="${vp.stroke}" stroke-width="1"/>
+    <text x="540" y="892" text-anchor="middle" font-family="sans-serif" font-size="28" font-weight="bold" fill="${vp.fg}">${escapeXml(badgeVerdict)}</text>
+    <foreignObject x="90" y="1240" width="900" height="100">
+      <div xmlns="http://www.w3.org/1999/xhtml" style="font-family:sans-serif;font-size:28px;line-height:1.4;color:#616161;text-align:center;margin:0;padding:0;">
+        ${insightHtml}
       </div>
     </foreignObject>
-    <text x="${cardW / 2}" y="${cardH - 36}" font-family="sans-serif" font-size="26" fill="#9e9e9e" text-anchor="middle">${escapeXml(params.subtitle ?? "gluci.app")}</text>
+    <rect x="0" y="1310" width="${W}" height="40" fill="#F5F5F5"/>
+    <text x="540" y="1337" text-anchor="middle" font-family="sans-serif" font-size="22" fill="#9E9E9E">${footer}</text>
   </svg>`;
 
-  let cardBuf = await sharp(Buffer.from(innerSvg)).png().toBuffer();
-  cardBuf = await sharp(cardBuf)
-    .composite([{ input: curveBuf, left: 60, top: 380 }])
+  const overlayPng = await sharp(Buffer.from(mainSvg)).png().toBuffer();
+
+  const innerW = 884;
+  const innerH = 284;
+  const curveInner = await sharp(Buffer.from(generateCurveSVG(params.glucoseCurve ?? [], innerW, innerH)))
     .png()
     .toBuffer();
 
-  await sharp(bgBuf)
-    .composite([{ input: cardBuf, left: cardLeft, top: cardTop }])
+  const borderSvg = `<svg width="900" height="300" xmlns="http://www.w3.org/2000/svg">
+    <rect x="1" y="1" width="898" height="298" rx="16" ry="16" fill="#FFFFFF" stroke="#EEEEEE" stroke-width="2"/>
+  </svg>`;
+  let curvePlate = await sharp(Buffer.from(borderSvg)).png().toBuffer();
+  curvePlate = await sharp(curvePlate)
+    .composite([{ input: curveInner, left: 8, top: 8 }])
+    .png()
+    .toBuffer();
+
+  await sharp(baseBuf)
+    .composite([
+      { input: overlayPng, left: 0, top: 0 },
+      { input: curvePlate, left: 90, top: 940 },
+    ])
     .png()
     .toFile(absolutePath);
 
   const base = getConfig().PUBLIC_BASE_URL.replace(/\/$/, "");
   return { relativeUrl: `${base}/static/cards/${filename}`, absolutePath };
-}
-
-function verdictBadgeColors(verdict: string): { bg: string; fg: string; stroke: string } {
-  const v = verdict.trim().toLowerCase();
-  if (v.includes("avoid")) return { bg: "#991b1b", fg: "#fef2f2", stroke: "#fca5a5" };
-  if (v.includes("modify")) return { bg: "#b45309", fg: "#fffbeb", stroke: "#fcd34d" };
-  if (v.includes("eat")) return { bg: "#15803d", fg: "#f0fdf4", stroke: "#86efac" };
-  return { bg: "#475569", fg: "#f8fafc", stroke: "#94a3b8" };
-}
-
-function verdictBadgeLabel(verdict: string): string {
-  const v = verdict.trim().toLowerCase();
-  if (v.includes("avoid")) return "AVOID";
-  if (v.includes("modify")) return "MODIFY";
-  if (v.includes("eat")) return "EAT";
-  return verdict.slice(0, 14).toUpperCase();
 }
 
 function escapeXml(s: string) {
@@ -189,7 +201,7 @@ function escapeXml(s: string) {
 }
 
 function escapeHtml(s: string) {
-  const lines = s.slice(0, 800).split(/\n+/);
+  const lines = s.slice(0, 900).split(/\n+/);
   return lines.map((l) => `<p>${escapeXml(l)}</p>`).join("");
 }
 

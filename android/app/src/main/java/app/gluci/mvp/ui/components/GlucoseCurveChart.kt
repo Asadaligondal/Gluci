@@ -1,76 +1,63 @@
 package app.gluci.mvp.ui.components
 
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.gluci.mvp.data.GluciCurvePoint
 import app.gluci.mvp.screens.reachableMediaUrl
 import coil.compose.AsyncImage
+import kotlin.math.min
 
-private val ZonePink = Color(0xFFFFEBEE)
-private val ZoneGreen = Color(0xFFE8F5E9)
-private val ThresholdDashColor = Color(0xFFBDBDBD)
+private val ZonePink = Color(0xFFFFDDE1)
+private val ZoneGreen = Color(0xFFD6F0E0)
+private val ThresholdLine = Color(0xFFBDBDBD)
 private val AxisGray = Color(0xFF9E9E9E)
+private val LabelBorder = Color(0xFFDDDDDD)
 
-private fun curveStrokeColorForPeak(peak: Float): Color {
-    return when {
-        peak < 30f -> Color(0xFF4CAF50)
-        peak <= 60f -> Color(0xFFFF6F00)
+private const val MaxMgDl = 80f
+private const val ThresholdMg = 30f
+
+private fun curveFillColorForPeak(peakMgDl: Double): Color =
+    when {
+        peakMgDl < 25.0 -> Color(0xFF2E7D32)
+        peakMgDl < 50.0 -> Color(0xFFE65100)
         else -> Color(0xFF1A1A1A)
     }
-}
 
-private fun buildOrganicCurvePath(points: List<Offset>): Path =
-    Path().apply {
-        if (points.size < 2) return@apply
-        moveTo(points.first().x, points.first().y)
-        for (i in 1 until points.size) {
-            val prev = points[i - 1]
-            val curr = points[i]
-            val cp1x = prev.x + (curr.x - prev.x) * 0.5f
-            val cp1y = prev.y
-            val cp2x = curr.x - (curr.x - prev.x) * 0.5f
-            val cp2y = curr.y
-            cubicTo(cp1x, cp1y, cp2x, cp2y, curr.x, curr.y)
-        }
-    }
-
-/**
- * Instagram-inspired glucose curve: pink spike zone over green safe zone, organic cubic curve,
- * optional circular meal photo and inline food title.
- */
 @Composable
 fun GlucoseCurveChart(
     curvePoints: List<GluciCurvePoint>,
@@ -79,175 +66,183 @@ fun GlucoseCurveChart(
     modifier: Modifier = Modifier,
 ) {
     val resolvedImg = remember(foodImageUrl) { foodImageUrl?.reachableMediaUrl() }
-    val peakMg = remember(curvePoints) {
-        curvePoints.maxOfOrNull { it.mgDl }?.toFloat()?.takeIf { it > 0f } ?: 1f
-    }
-    val curveStroke = remember(curvePoints) { curveStrokeColorForPeak(peakMg) }
+    val title = remember(foodName) { foodName.trim().ifEmpty { "Your meal" } }
 
     Card(
         modifier = modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp),
-        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
         colors = CardDefaults.cardColors(containerColor = Color.White),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+        shape = RoundedCornerShape(12.dp),
     ) {
-        Column(Modifier.padding(16.dp)) {
-            val chartPlotHeight = 180.dp
-            val labelColumnWidth = 72.dp
-            val imageSlot = if (resolvedImg != null) 80.dp else 0.dp
-            val rawPeakVal = curvePoints.maxOfOrNull { it.mgDl }?.toFloat()?.takeIf { it > 0f } ?: 1f
-            val maxMgScale = kotlin.math.max(rawPeakVal, 60f)
-
+        Column(Modifier.fillMaxWidth()) {
             Row(
-                Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(180.dp),
             ) {
-                Box(
-                    Modifier
-                        .width(labelColumnWidth)
-                        .height(chartPlotHeight),
+                Column(
+                    modifier = Modifier
+                        .width(52.dp)
+                        .fillMaxHeight()
+                        .padding(bottom = 20.dp, top = 4.dp, end = 4.dp),
                 ) {
+                    Spacer(Modifier.weight(0.1f))
                     Text(
                         text = "+60",
-                        fontSize = 10.sp,
+                        fontSize = 9.sp,
                         color = AxisGray,
-                        modifier = Modifier.align(Alignment.TopStart),
+                        textAlign = TextAlign.End,
+                        modifier = Modifier.fillMaxWidth(),
                     )
+                    Spacer(Modifier.weight(0.35f))
                     Text(
-                        text = "spike +30",
-                        fontSize = 10.sp,
+                        text = "spike\n+30",
+                        fontSize = 9.sp,
                         color = AxisGray,
-                        modifier = Modifier
-                            .align(Alignment.TopStart)
-                            .offset(y = chartPlotHeight * (1f - 30f / maxMgScale)),
+                        textAlign = TextAlign.End,
+                        modifier = Modifier.fillMaxWidth(),
                     )
+                    Spacer(Modifier.weight(0.35f))
                     Text(
                         text = "baseline",
-                        fontSize = 10.sp,
+                        fontSize = 9.sp,
                         color = AxisGray,
-                        modifier = Modifier.align(Alignment.BottomStart),
+                        textAlign = TextAlign.End,
+                        modifier = Modifier.fillMaxWidth(),
                     )
+                    Spacer(Modifier.weight(0.1f))
                 }
 
                 Box(
-                    Modifier
+                    modifier = Modifier
                         .weight(1f)
-                        .height(chartPlotHeight),
+                        .fillMaxHeight(),
                 ) {
-                    Canvas(
-                        Modifier
-                            .fillMaxWidth()
-                            .fillMaxHeight()
-                            .padding(end = imageSlot),
-                    ) {
-                        val plotW = size.width
-                        val plotH = size.height
-                        val rawPeak = curvePoints.maxOfOrNull { it.mgDl }?.toFloat()?.takeIf { it > 0f } ?: 1f
-                        val maxMg = kotlin.math.max(rawPeak, 60f)
+                    Canvas(modifier = Modifier.fillMaxWidth().fillMaxHeight()) {
+                        val w = size.width
+                        val h = size.height
+                        val thresholdY = h * (1f - ThresholdMg / MaxMgDl)
 
-                        fun mgToY(mg: Double): Float =
-                            plotH - ((mg / maxMg.toDouble()).coerceIn(0.0, 1.0).toFloat() * plotH)
-
-                        val thresholdY = mgToY(30.0)
-                        drawRect(color = ZonePink, topLeft = Offset.Zero, size = Size(plotW, thresholdY.coerceAtLeast(0f)))
                         drawRect(
                             color = ZoneGreen,
-                            topLeft = Offset(0f, thresholdY.coerceAtMost(plotH)),
-                            size = Size(plotW, (plotH - thresholdY).coerceAtLeast(0f)),
+                            topLeft = Offset(0f, thresholdY),
+                            size = Size(w, h - thresholdY),
+                        )
+                        drawRect(
+                            color = ZonePink,
+                            topLeft = Offset.Zero,
+                            size = Size(w, thresholdY),
                         )
 
-                        val dashEffect = PathEffect.dashPathEffect(floatArrayOf(4.dp.toPx(), 4.dp.toPx()))
-                        drawLine(
-                            color = ThresholdDashColor,
-                            start = Offset(0f, thresholdY.coerceIn(0f, plotH)),
-                            end = Offset(plotW, thresholdY.coerceIn(0f, plotH)),
-                            strokeWidth = 1.dp.toPx(),
-                            pathEffect = dashEffect,
-                        )
-
-                        val pts = curvePoints.map { p ->
-                            val x = (p.minute / 120f) * plotW
-                            val y = mgToY(p.mgDl).coerceIn(0f, plotH)
-                            Offset(x, y)
-                        }
-
-                        if (pts.size >= 2) {
-                            val strokePath = buildOrganicCurvePath(pts)
-                            val fillPath = buildOrganicCurvePath(pts).also { fp ->
-                                fp.lineTo(pts.last().x, plotH)
-                                fp.lineTo(pts.first().x, plotH)
-                                fp.close()
-                            }
-                            drawPath(path = fillPath, color = curveStroke.copy(alpha = 0.25f))
-                            drawPath(
-                                path = strokePath,
-                                color = curveStroke,
-                                style = Stroke(width = 5.dp.toPx(), cap = StrokeCap.Round),
+                        val dashWidth = 8.dp.toPx()
+                        val gapWidth = 4.dp.toPx()
+                        var x = 0f
+                        while (x < w) {
+                            drawLine(
+                                color = ThresholdLine,
+                                start = Offset(x, thresholdY),
+                                end = Offset(min(x + dashWidth, w), thresholdY),
+                                strokeWidth = 1.dp.toPx(),
                             )
-                            val peakIdx = curvePoints.indices.maxByOrNull { curvePoints[it].mgDl } ?: -1
-                            if (peakIdx >= 0 && peakIdx < pts.size) {
-                                drawCircle(color = curveStroke, radius = 5.dp.toPx(), center = pts[peakIdx])
+                            x += dashWidth + gapWidth
+                        }
+
+                        if (curvePoints.size < 2) return@Canvas
+
+                        val mapped = curvePoints.map { pt ->
+                            Offset(
+                                x = (pt.minute / 120f) * w,
+                                y = h - (pt.mgDl.toFloat() / MaxMgDl).coerceIn(0f, 1f) * h,
+                            )
+                        }
+
+                        val peak = curvePoints.maxOf { it.mgDl }
+                        val curveColor = curveFillColorForPeak(peak)
+
+                        val fillPath = Path().apply {
+                            moveTo(mapped.first().x, h)
+                            lineTo(mapped.first().x, mapped.first().y)
+                            for (i in 1 until mapped.size) {
+                                val prev = mapped[i - 1]
+                                val curr = mapped[i]
+                                val cp1x = prev.x + (curr.x - prev.x) * 0.5f
+                                val cp2x = curr.x - (curr.x - prev.x) * 0.5f
+                                cubicTo(cp1x, prev.y, cp2x, curr.y, curr.x, curr.y)
+                            }
+                            lineTo(mapped.last().x, h)
+                            close()
+                        }
+                        drawPath(path = fillPath, color = curveColor)
+
+                        val strokePath = Path().apply {
+                            moveTo(mapped.first().x, mapped.first().y)
+                            for (i in 1 until mapped.size) {
+                                val prev = mapped[i - 1]
+                                val curr = mapped[i]
+                                val cp1x = prev.x + (curr.x - prev.x) * 0.5f
+                                val cp2x = curr.x - (curr.x - prev.x) * 0.5f
+                                cubicTo(cp1x, prev.y, cp2x, curr.y, curr.x, curr.y)
                             }
                         }
+                        drawPath(
+                            path = strokePath,
+                            color = curveColor.copy(alpha = 0.7f),
+                            style = Stroke(
+                                width = 2.dp.toPx(),
+                                cap = StrokeCap.Round,
+                                join = StrokeJoin.Round,
+                            ),
+                        )
                     }
 
-                    val title = foodName.trim().ifEmpty { "Your meal" }
-                    Surface(
+                    Box(
                         modifier = Modifier
-                            .padding(start = 16.dp, top = 16.dp)
-                            .shadow(
-                                elevation = 2.dp,
-                                shape = RoundedCornerShape(8.dp),
-                                spotColor = Color.Black.copy(alpha = 0.22f),
-                            ),
-                        shape = RoundedCornerShape(8.dp),
-                        color = Color.White,
-                        tonalElevation = 0.dp,
-                        shadowElevation = 0.dp,
+                            .padding(8.dp)
+                            .align(Alignment.TopStart)
+                            .background(Color.White, RoundedCornerShape(6.dp))
+                            .border(1.dp, LabelBorder, RoundedCornerShape(6.dp))
+                            .padding(horizontal = 8.dp, vertical = 4.dp),
                     ) {
                         Text(
                             text = title,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Medium,
                             color = Color(0xFF1A1A1A),
-                            fontSize = 13.sp,
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
                             maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.widthIn(max = 100.dp),
                         )
                     }
+                }
 
+                Box(
+                    modifier = Modifier
+                        .width(90.dp)
+                        .fillMaxHeight()
+                        .padding(4.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
                     resolvedImg?.let { url ->
                         AsyncImage(
                             model = url,
-                            contentDescription = "Meal photo",
+                            contentDescription = title,
                             contentScale = ContentScale.Crop,
                             modifier = Modifier
-                                .align(Alignment.CenterEnd)
-                                .size(72.dp)
-                                .clip(CircleShape)
-                                .border(2.dp, Color.White, CircleShape)
-                                .shadow(4.dp, CircleShape),
+                                .size(80.dp)
+                                .clip(RoundedCornerShape(8.dp)),
                         )
                     }
                 }
             }
 
             Row(
-                Modifier
+                modifier = Modifier
                     .fillMaxWidth()
-                    .padding(start = labelColumnWidth, top = 6.dp),
+                    .padding(start = 56.dp, end = 94.dp, top = 2.dp, bottom = 6.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
             ) {
-                Text(
-                    text = "eating time",
-                    fontSize = 10.sp,
-                    color = AxisGray,
-                    modifier = Modifier.weight(1f),
-                    textAlign = TextAlign.Start,
-                )
-                Text(
-                    text = "+ 2 hours",
-                    fontSize = 10.sp,
-                    color = AxisGray,
-                    modifier = Modifier.weight(1f),
-                    textAlign = TextAlign.End,
-                )
+                Text("eating time", fontSize = 9.sp, color = AxisGray)
+                Text("+ 2 hours", fontSize = 9.sp, color = AxisGray)
             }
         }
     }
