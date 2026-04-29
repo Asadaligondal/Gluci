@@ -75,10 +75,16 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
+import app.gluci.mvp.ui.components.FoodResultCard
 import app.gluci.mvp.vm.GluciViewModel
 import app.gluci.mvp.vm.OutgoingStatus
 import app.gluci.mvp.vm.UiMessage
 import coil.compose.AsyncImage
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
+import android.widget.Toast
+import androidx.compose.ui.platform.LocalContext
 
 private val SageMuted = Color(0xFF769A8F)
 /** Mint “primary fixed” from mock — not all Material3 versions expose `primaryFixed` on ColorScheme. */
@@ -101,6 +107,7 @@ fun ChatScreen(
     val listState = rememberLazyListState()
     var sharedCard by remember { mutableStateOf<Triple<String, String, String?>?>(null) }
     var pendingImageUri by remember { mutableStateOf<Uri?>(null) }
+    val ctx = LocalContext.current
 
     LaunchedEffect(conversationId) {
         vm.openConversation(conversationId) { }
@@ -185,7 +192,7 @@ fun ChatScreen(
                     count = messages.size,
                     key = { i ->
                         val msg = messages[i]
-                        "m-$i-${msg.content.hashCode()}-${msg.imageUrl}-${msg.shareCardUrl}"
+                        msg.id ?: "m-$i-${msg.createdAtMs}-${msg.content.hashCode()}"
                     },
                 ) { i ->
                     ChatMessageBubble(
@@ -198,6 +205,14 @@ fun ChatScreen(
                                 append("My Gluci food check")
                                 if (verdict != null) append(" — $verdict")
                                 if (score != null) append(" ($score)")
+                            }
+                            sharedCard = Triple(url, caption, landing)
+                        },
+                        shareGluciCard = { url, caption, landing ->
+                            landing?.let { land ->
+                                val cm = ctx.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                                cm.setPrimaryClip(ClipData.newPlainText("Gluci invite", land))
+                                Toast.makeText(ctx, "Invite link copied", Toast.LENGTH_SHORT).show()
                             }
                             sharedCard = Triple(url, caption, landing)
                         },
@@ -391,12 +406,14 @@ private fun WelcomeHero(
 private fun ChatMessageBubble(
     m: UiMessage,
     onShareCardClick: (String, String?) -> Unit = { _, _ -> },
+    shareGluciCard: (String, String, String?) -> Unit = { _, _, _ -> },
 ) {
     val isUser = m.role == "user"
     val time = GluciViewModel.formatMessageTime(m.createdAtMs)
     val userImageDisplayUrl = remember(isUser, m.imageUrl) {
         if (isUser && !m.imageUrl.isNullOrBlank()) m.imageUrl!!.reachableMediaUrl() else null
     }
+    val hasFoodCurve = !isUser && !m.glucoseCurve.isNullOrEmpty()
     Column(
         modifier = Modifier.fillMaxWidth(),
         horizontalAlignment = if (isUser) Alignment.End else Alignment.Start,
@@ -427,7 +444,8 @@ private fun ChatMessageBubble(
                 val showInsight = !isUser &&
                     !m.verdict.isNullOrBlank() &&
                     !m.verdict.equals("general", ignoreCase = true) &&
-                    !m.intent.equals("general", ignoreCase = true)
+                    !m.intent.equals("general", ignoreCase = true) &&
+                    !hasFoodCurve
                 if (showInsight) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
@@ -480,13 +498,35 @@ private fun ChatMessageBubble(
                 if (showInsight) {
                     InsightStrip(m)
                 }
-                if (!isUser && !m.shareCardUrl.isNullOrBlank()) {
+                if (!isUser && !m.shareCardUrl.isNullOrBlank() && !hasFoodCurve) {
                     ShareCardPreview(
                         url = m.shareCardUrl,
                         onClick = { onShareCardClick(m.shareCardUrl!!, m.shareLandingUrl) },
                     )
                 }
             }
+        }
+        if (hasFoodCurve) {
+            val curve = m.glucoseCurve!!
+            val peak = curve.maxOf { it.mgDl }.toFloat()
+            val peakColor = GluciViewModel.getCurveColor(peak)
+            FoodResultCard(
+                score = (m.score ?: 0.0).toFloat(),
+                verdict = m.verdict ?: "",
+                tip = m.tip.orEmpty(),
+                curvePoints = curve,
+                shareCardUrl = m.shareCardUrl,
+                peakCurveColor = peakColor,
+                onShare = {
+                    val url = m.shareCardUrl ?: return@FoodResultCard
+                    val caption =
+                        "My glucose score for this meal: ${String.format("%.1f", m.score ?: 0.0)}/10 via @gluciapp #glucosegoddess #bloodsugar"
+                    shareGluciCard(url, caption, m.shareLandingUrl)
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 8.dp),
+            )
         }
         Row(
             modifier = Modifier

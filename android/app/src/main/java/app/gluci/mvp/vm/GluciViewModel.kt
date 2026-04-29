@@ -18,6 +18,10 @@ import app.gluci.mvp.data.ProfilePatch
 import app.gluci.mvp.data.ProfileResponse
 import app.gluci.mvp.data.TokenStore
 import app.gluci.mvp.data.WeeklySummaryDto
+import app.gluci.mvp.data.GluciCurvePoint
+import app.gluci.mvp.data.WeekDailyBarDto
+import app.gluci.mvp.data.parseGlucoseCurve
+import androidx.compose.ui.graphics.Color
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -35,6 +39,7 @@ enum class OutgoingStatus {
 }
 
 data class UiMessage(
+    val id: String? = null,
     val role: String,
     val content: String,
     val imageUrl: String? = null,
@@ -43,8 +48,17 @@ data class UiMessage(
     val intent: String? = null,
     val shareCardUrl: String? = null,
     val shareLandingUrl: String? = null,
+    val glucoseCurve: List<GluciCurvePoint>? = null,
+    val tip: String? = null,
     val outgoingStatus: OutgoingStatus = OutgoingStatus.None,
     val createdAtMs: Long? = null,
+)
+
+data class LastFoodInsight(
+    val glucoseCurve: List<GluciCurvePoint>?,
+    val score: Float?,
+    val verdict: String?,
+    val tip: String?,
 )
 
 class GluciViewModel(app: Application) : AndroidViewModel(app) {
@@ -74,6 +88,12 @@ class GluciViewModel(app: Application) : AndroidViewModel(app) {
 
     private val _weeklySummary = MutableStateFlow<WeeklySummaryDto?>(null)
     val weeklySummary: StateFlow<WeeklySummaryDto?> = _weeklySummary.asStateFlow()
+
+    private val _weekDailyBars = MutableStateFlow<List<WeekDailyBarDto>>(emptyList())
+    val weekDailyBars: StateFlow<List<WeekDailyBarDto>> = _weekDailyBars.asStateFlow()
+
+    private val _lastFoodInsight = MutableStateFlow<LastFoodInsight?>(null)
+    val lastFoodInsight: StateFlow<LastFoodInsight?> = _lastFoodInsight.asStateFlow()
 
     private val _summariesLoading = MutableStateFlow(false)
     val summariesLoading: StateFlow<Boolean> = _summariesLoading.asStateFlow()
@@ -164,6 +184,8 @@ class GluciViewModel(app: Application) : AndroidViewModel(app) {
         _usage.value = null
         _dailySummary.value = null
         _weeklySummary.value = null
+        _weekDailyBars.value = emptyList()
+        _lastFoodInsight.value = null
         _error.value = null
         _sessionExpired.value = true
     }
@@ -189,6 +211,7 @@ class GluciViewModel(app: Application) : AndroidViewModel(app) {
                 val auth = "Bearer $t"
                 _dailySummary.value = api.dailySummary(auth).summary
                 _weeklySummary.value = api.weeklySummary(auth).summary
+                _weekDailyBars.value = api.weekDailyScores(auth).days
             } catch (e: Exception) {
                 if (isUnauthorized(e)) handleUnauthorized()
             } finally {
@@ -382,6 +405,8 @@ class GluciViewModel(app: Application) : AndroidViewModel(app) {
             _channels.value = null
             _dailySummary.value = null
             _weeklySummary.value = null
+            _weekDailyBars.value = emptyList()
+            _lastFoodInsight.value = null
             onDone()
         }
     }
@@ -440,6 +465,7 @@ class GluciViewModel(app: Application) : AndroidViewModel(app) {
                 val h = api.history("Bearer $t", id)
                 _messages.value = h.messages.map {
                     UiMessage(
+                        id = it.id,
                         role = it.role,
                         content = it.content,
                         imageUrl = it.imageUrl,
@@ -447,6 +473,8 @@ class GluciViewModel(app: Application) : AndroidViewModel(app) {
                         verdict = it.verdict,
                         intent = it.intent,
                         shareCardUrl = it.shareCardUrl,
+                        glucoseCurve = it.glucoseCurve.parseGlucoseCurve(),
+                        tip = it.tip,
                     )
                 }
                 onReady()
@@ -489,6 +517,8 @@ class GluciViewModel(app: Application) : AndroidViewModel(app) {
                     intent = out.intent,
                     shareCardUrl = out.shareCardUrl,
                     shareLandingUrl = out.shareLandingUrl,
+                    glucoseCurve = out.glucoseCurve,
+                    tip = out.tip,
                 )
                 handlePaywall(out.paywall?.checkoutUrl)
                 refreshConversations()
@@ -544,6 +574,8 @@ class GluciViewModel(app: Application) : AndroidViewModel(app) {
                     intent = out.intent,
                     shareCardUrl = out.shareCardUrl,
                     shareLandingUrl = out.shareLandingUrl,
+                    glucoseCurve = out.glucoseCurve,
+                    tip = out.tip,
                 )
                 handlePaywall(out.paywall?.checkoutUrl)
                 refreshConversations()
@@ -586,6 +618,8 @@ class GluciViewModel(app: Application) : AndroidViewModel(app) {
                     intent = out.intent,
                     shareCardUrl = out.shareCardUrl,
                     shareLandingUrl = out.shareLandingUrl,
+                    glucoseCurve = out.glucoseCurve,
+                    tip = out.tip,
                 )
                 handlePaywall(out.paywall?.checkoutUrl)
                 refreshConversations()
@@ -660,6 +694,8 @@ class GluciViewModel(app: Application) : AndroidViewModel(app) {
         intent: String? = null,
         shareCardUrl: String? = null,
         shareLandingUrl: String? = null,
+        glucoseCurve: List<GluciCurvePoint>? = null,
+        tip: String? = null,
     ) {
         val now = System.currentTimeMillis()
         val cur = _messages.value.toMutableList()
@@ -681,10 +717,13 @@ class GluciViewModel(app: Application) : AndroidViewModel(app) {
                 intent = intent,
                 shareCardUrl = shareCardUrl,
                 shareLandingUrl = shareLandingUrl,
+                glucoseCurve = glucoseCurve,
+                tip = tip,
                 createdAtMs = now,
             ),
         )
         _messages.value = cur
+        _lastFoodInsight.value = LastFoodInsight(glucoseCurve, score?.toFloat(), verdict, tip)
     }
 
     private fun appendAssistantOnly(
@@ -694,8 +733,11 @@ class GluciViewModel(app: Application) : AndroidViewModel(app) {
         intent: String?,
         shareCardUrl: String?,
         shareLandingUrl: String? = null,
+        glucoseCurve: List<GluciCurvePoint>? = null,
+        tip: String? = null,
     ) {
         val now = System.currentTimeMillis()
+        _lastFoodInsight.value = LastFoodInsight(glucoseCurve, score?.toFloat(), verdict, tip)
         _messages.value = _messages.value + UiMessage(
             role = "assistant",
             content = reply,
@@ -704,6 +746,8 @@ class GluciViewModel(app: Application) : AndroidViewModel(app) {
             intent = intent,
             shareCardUrl = shareCardUrl,
             shareLandingUrl = shareLandingUrl,
+            glucoseCurve = glucoseCurve,
+            tip = tip,
             createdAtMs = now,
         )
     }
@@ -727,6 +771,14 @@ class GluciViewModel(app: Application) : AndroidViewModel(app) {
 
     companion object {
         private val timeFmt: DateTimeFormatter = DateTimeFormatter.ofPattern("h:mm a")
+
+        fun getCurveColor(peakMgDl: Float): Color {
+            return when {
+                peakMgDl < 20f -> Color(0xFF4CAF50)
+                peakMgDl <= 40f -> Color(0xFFFF9800)
+                else -> Color(0xFFF44336)
+            }
+        }
 
         fun formatMessageTime(ms: Long?): String {
             if (ms == null) return ""

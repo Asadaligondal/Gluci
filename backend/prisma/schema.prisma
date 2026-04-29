@@ -106,3 +106,22 @@ model UsageEvent {
   verdict   String?
   createdAt DateTime @default(now())
 }
+
+/// Seeded Instagram RAG rows; `embedding` uses pgvector (managed via SQL / seed script).
+model InstagramKnowledge {
+  id                   Int     @id @default(autoincrement())
+  account              String
+  date                 String?
+  caption              String?
+  foods                String[]
+  glucose_impact       String?
+  spike_estimate_mg_dl Int?
+  verdict              String?
+  score                Int?
+  key_tip              String?
+  likes                Int?
+  url                  String?
+  embedding            Unsupported("vector(1536)")?
+
+  @@map("instagram_knowledge")
+}

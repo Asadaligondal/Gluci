@@ -6,7 +6,7 @@ import { getConfig } from "./config.js";
 import { prisma } from "./db.js";
 import { logAnalytics } from "./services/analytics.js";
 import { authRouter } from "./routes/v1/auth.js";
-import { chatRouter } from "./routes/v1/chat.js";
+import { chatRouter, glucoseCurveRouter } from "./routes/v1/chat.js";
 import { profileRouter } from "./routes/v1/profile.js";
 import { historyRouter } from "./routes/v1/history.js";
 import { billingRouter, handleStripeWebhook } from "./routes/v1/billing.js";
@@ -53,6 +53,7 @@ app.use("/static/uploads", express.static(uploadsDir));
 
 app.use("/v1/auth", authRouter);
 app.use("/v1/chat", chatRouter);
+app.use("/v1/glucose-curve", glucoseCurveRouter);
 app.use("/v1/conversations", conversationsRouter);
 app.use("/v1/profile", profileRouter);
 app.use("/v1/history", historyRouter);

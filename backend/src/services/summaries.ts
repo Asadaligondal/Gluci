@@ -253,6 +253,55 @@ export async function buildWeeklySummary(userId: string): Promise<WeeklySummary 
   };
 }
 
+/** Rolling last 7 UTC calendar days (including today): avg score per day from UsageEvent. */
+export type WeekDailyBar = {
+  date: string;
+  averageScore: number | null;
+  checks: number;
+};
+
+export async function buildWeekDailyBars(userId: string): Promise<WeekDailyBar[]> {
+  const now = new Date();
+  const periodStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - 6, 0, 0, 0, 0));
+  const events = await prisma.usageEvent.findMany({
+    where: { userId, createdAt: { gte: periodStart } },
+    select: { score: true, createdAt: true },
+  });
+
+  const labels: string[] = [];
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - i, 12, 0, 0, 0));
+    labels.push(d.toISOString().slice(0, 10));
+  }
+
+  const scoresByDay = new Map<string, number[]>();
+  const checksByDay = new Map<string, number>();
+  for (const k of labels) {
+    scoresByDay.set(k, []);
+    checksByDay.set(k, 0);
+  }
+
+  for (const e of events) {
+    const key = e.createdAt.toISOString().slice(0, 10);
+    if (!checksByDay.has(key)) continue;
+    checksByDay.set(key, (checksByDay.get(key) ?? 0) + 1);
+    if (e.score != null) scoresByDay.get(key)!.push(e.score);
+  }
+
+  const out: WeekDailyBar[] = [];
+  for (const k of labels) {
+    const scores = scoresByDay.get(k) ?? [];
+    const averageScore =
+      scores.length > 0 ? Math.round((avg(scores)) * 10) / 10 : null;
+    out.push({
+      date: k,
+      averageScore,
+      checks: checksByDay.get(k) ?? 0,
+    });
+  }
+  return out;
+}
+
 export async function usersEligibleForReengagement() {
   const candidates = await prisma.user.findMany({
     where: {

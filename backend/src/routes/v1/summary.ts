@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { authAppBearer, type AuthedRequest } from "../../middleware/authApp.js";
-import { buildDailySummary, buildWeeklySummary } from "../../services/summaries.js";
+import { buildDailySummary, buildWeekDailyBars, buildWeeklySummary } from "../../services/summaries.js";
 import { prisma } from "../../db.js";
 import { getConfig } from "../../config.js";
 
@@ -17,6 +17,12 @@ summaryRouter.get("/weekly", async (req: AuthedRequest, res) => {
   const s = await buildWeeklySummary(req.userId!);
   if (!s) return res.json({ summary: null });
   res.json({ summary: s });
+});
+
+/** GET /v1/summary/week-daily — avg score per day for last 7 UTC days (usage events). */
+summaryRouter.get("/week-daily", async (req: AuthedRequest, res) => {
+  const days = await buildWeekDailyBars(req.userId!);
+  res.json({ days });
 });
 
 summaryRouter.get("/usage", async (req: AuthedRequest, res) => {

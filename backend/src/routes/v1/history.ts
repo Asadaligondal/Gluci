@@ -25,6 +25,8 @@ historyRouter.get("/", async (req: AuthedRequest, res) => {
       let verdict: string | null = null;
       let intent: string | null = null;
       let shareCardUrl: string | null = null;
+      let tip: string | null = null;
+      let glucoseCurve: unknown = null;
       if (m.metadata) {
         try {
           const meta = JSON.parse(m.metadata) as {
@@ -32,11 +34,15 @@ historyRouter.get("/", async (req: AuthedRequest, res) => {
             verdict?: string | null;
             intent?: string | null;
             shareCardUrl?: string | null;
+            tip?: string | null;
+            glucoseCurve?: unknown;
           };
           if (typeof meta.score === "number") score = meta.score;
           if (typeof meta.verdict === "string") verdict = meta.verdict;
           if (typeof meta.intent === "string") intent = meta.intent;
           if (typeof meta.shareCardUrl === "string") shareCardUrl = meta.shareCardUrl;
+          if (typeof meta.tip === "string") tip = meta.tip;
+          if (Array.isArray(meta.glucoseCurve)) glucoseCurve = meta.glucoseCurve;
         } catch {
           /* ignore malformed metadata */
         }
@@ -53,6 +59,8 @@ historyRouter.get("/", async (req: AuthedRequest, res) => {
         verdict,
         intent,
         shareCardUrl,
+        tip,
+        glucoseCurve,
       };
     }),
   });

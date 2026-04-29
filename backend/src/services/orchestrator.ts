@@ -8,6 +8,28 @@ import { renderShareCard, saveUploadBase64 } from "./shareCard.js";
 import { getConversationForUser } from "./conversationService.js";
 import { ensureShareRef } from "./shareRef.js";
 import { logAnalytics } from "./analytics.js";
+import { findRelevantKnowledge } from "./knowledgeBase.js";
+
+function stripBarcodeAnnotations(text: string): string {
+  return text
+    .replace(/\n\n\[Barcode[^\]]*\]/gi, "")
+    .replace(/\n\n\[Product data from barcode[^\]]*\]/gi, "")
+    .trim();
+}
+
+function summarizeFoodInput(text: string): string {
+  const s = stripBarcodeAnnotations(text).trim();
+  return s.slice(0, 400);
+}
+
+/** Text suitable for embedding search — skips greetings and generic vision prompts. */
+function extractFoodDescription(text: string): string | null {
+  const t = stripBarcodeAnnotations(text).trim();
+  if (!t || t.length < 4) return null;
+  if (/^(hi!?|hello\b)/i.test(t)) return null;
+  if (/^please analyze the attached image\.?$/i.test(t.trim())) return null;
+  return t.slice(0, 800);
+}
 
 function profileToContext(profile: { goal: string | null; dietaryJson: string | null; memoryJson: string | null }) {
   const parts: string[] = [];
@@ -139,12 +161,24 @@ export async function handleChatTurn(params: {
     data: { updatedAt: new Date() },
   });
 
+  const llmUserText = enriched || "Please analyze the attached image.";
+  let knowledgeContext: Awaited<ReturnType<typeof findRelevantKnowledge>> = [];
+  try {
+    const fd = extractFoodDescription(llmUserText);
+    if (fd) {
+      knowledgeContext = await findRelevantKnowledge(fd, 3);
+    }
+  } catch (e) {
+    console.warn("findRelevantKnowledge:", e);
+  }
+
   const structured = await runGluciTurn({
-    userText: enriched || "Please analyze the attached image.",
+    userText: llmUserText,
     imageBase64: params.imageBase64,
     mimeType: params.mimeType,
     history,
     profileContext: profileToContext(profile),
+    knowledgeContext,
   });
 
   let shareCardUrl: string | undefined;
@@ -165,6 +199,7 @@ export async function handleChatTurn(params: {
       insight: structured.userReply.slice(0, 400),
       subtitle: `Join Gluci: ${shareLandingUrl}`,
       heroImagePath: heroAbs,
+      glucoseCurve: structured.glucoseCurve,
     });
     shareCardUrl = card.relativeUrl;
     void logAnalytics({
@@ -188,6 +223,9 @@ export async function handleChatTurn(params: {
         verdict: structured.verdict,
         intent: structured.intent,
         shareCardUrl,
+        glucoseCurve: structured.glucoseCurve ?? null,
+        tip: structured.tip ?? null,
+        food: summarizeFoodInput(enriched || llmUserText) || undefined,
       }),
     },
   });

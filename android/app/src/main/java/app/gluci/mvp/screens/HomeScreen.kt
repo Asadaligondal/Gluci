@@ -47,6 +47,7 @@ import androidx.navigation.NavController
 import app.gluci.mvp.data.BillingStatusResponse
 import app.gluci.mvp.data.DailySummaryDto
 import app.gluci.mvp.data.WeeklySummaryDto
+import app.gluci.mvp.ui.components.GlucoseWeekSection
 import app.gluci.mvp.vm.GluciViewModel
 import java.time.Instant
 import java.time.ZoneId
@@ -69,6 +70,7 @@ fun HomeScreen(
     val daily by vm.dailySummary.collectAsState()
     val weekly by vm.weeklySummary.collectAsState()
     val summariesLoading by vm.summariesLoading.collectAsState()
+    val weekDailyBars by vm.weekDailyBars.collectAsState()
 
     LaunchedEffect(Unit) {
         vm.logAnalyticsEvent("app_open", emptyMap())
@@ -130,6 +132,13 @@ fun HomeScreen(
                         loading = summariesLoading,
                         daily = daily,
                         weekly = weekly,
+                    )
+                }
+                item {
+                    GlucoseWeekSection(
+                        bars = weekDailyBars,
+                        loading = summariesLoading,
+                        modifier = Modifier.padding(top = 4.dp),
                     )
                 }
                 if (convs.isNotEmpty()) {

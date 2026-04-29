@@ -1,5 +1,6 @@
 package app.gluci.mvp.data
 
+import com.google.gson.JsonElement
 import com.google.gson.annotations.SerializedName
 import retrofit2.Response
 import retrofit2.http.Body
@@ -53,11 +54,18 @@ data class ChatRequest(
     val barcode: String? = null,
 )
 
+data class GluciCurvePoint(
+    val minute: Int,
+    @SerializedName("mg_dl") val mgDl: Double,
+)
+
 data class ChatResponse(
     val reply: String,
     val score: Double?,
     val verdict: String?,
     val intent: String?,
+    val tip: String?,
+    val glucoseCurve: List<GluciCurvePoint>?,
     val topOrders: List<TopOrder>?,
     @SerializedName("shareCardUrl") val shareCardUrl: String?,
     @SerializedName("userImageUrl") val userImageUrl: String? = null,
@@ -89,6 +97,9 @@ data class HistoryMessage(
     val verdict: String? = null,
     val intent: String? = null,
     val shareCardUrl: String? = null,
+    val tip: String? = null,
+    /** Present on assistant bubbles when backend stored glucose curve in metadata. */
+    val glucoseCurve: JsonElement? = null,
 )
 
 data class ProfilePatch(
@@ -161,6 +172,17 @@ data class WeeklySummaryDto(
 
 data class WeeklySummaryEnvelope(
     val summary: WeeklySummaryDto?,
+)
+
+/** GET /v1/summary/week-daily — rolling 7 UTC days average scores from usage events. */
+data class WeekDailyBarDto(
+    val date: String,
+    @SerializedName("averageScore") val averageScore: Double?,
+    val checks: Int,
+)
+
+data class WeekDailyEnvelope(
+    val days: List<WeekDailyBarDto>,
 )
 
 data class BillingStatusResponse(
@@ -243,6 +265,11 @@ interface GluciApi {
     suspend fun weeklySummary(
         @Header("Authorization") authorization: String,
     ): WeeklySummaryEnvelope
+
+    @GET("v1/summary/week-daily")
+    suspend fun weekDailyScores(
+        @Header("Authorization") authorization: String,
+    ): WeekDailyEnvelope
 
     @GET("v1/channels/")
     suspend fun getChannels(

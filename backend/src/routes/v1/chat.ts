@@ -2,9 +2,14 @@ import { Router } from "express";
 import { z } from "zod";
 import { authAppBearer, type AuthedRequest } from "../../middleware/authApp.js";
 import { handleChatTurn } from "../../services/orchestrator.js";
+import { prisma } from "../../db.js";
 
 export const chatRouter = Router();
 chatRouter.use(authAppBearer);
+
+/** GET /v1/glucose-curve/:messageId — glucose curve stored on assistant message metadata */
+export const glucoseCurveRouter = Router();
+glucoseCurveRouter.use(authAppBearer);
 
 const bodySchema = z.object({
   conversationId: z.string().min(1),
@@ -38,9 +43,50 @@ chatRouter.post("/", async (req: AuthedRequest, res) => {
       shareLandingUrl: out.shareLandingUrl,
       userImageUrl: out.userImageUrl,
       paywall: out.paywall,
+      glucoseCurve: out.structured.glucoseCurve ?? null,
+      tip: out.structured.tip ?? null,
     });
   } catch (e) {
     console.error(e);
     res.status(500).json({ error: "Chat failed", detail: String(e) });
+  }
+});
+
+glucoseCurveRouter.get("/:messageId", async (req: AuthedRequest, res) => {
+  const messageId = req.params.messageId;
+  if (!messageId) return res.status(400).json({ error: "messageId required" });
+
+  try {
+    const msg = await prisma.message.findFirst({
+      where: { id: messageId, userId: req.userId!, role: "assistant" },
+      select: { id: true, metadata: true, content: true },
+    });
+    if (!msg) return res.status(404).json({ error: "Message not found" });
+
+    let meta: Record<string, unknown> = {};
+    try {
+      if (msg.metadata) meta = JSON.parse(msg.metadata) as Record<string, unknown>;
+    } catch {
+      meta = {};
+    }
+
+    const glucoseCurve = meta.glucoseCurve;
+    const score = typeof meta.score === "number" ? meta.score : null;
+    const verdict = typeof meta.verdict === "string" ? meta.verdict : "";
+    const food =
+      typeof meta.food === "string" && meta.food.trim()
+        ? meta.food
+        : msg.content.slice(0, 400);
+
+    res.json({
+      messageId: msg.id,
+      food,
+      glucoseCurve: Array.isArray(glucoseCurve) ? glucoseCurve : [],
+      score,
+      verdict,
+    });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: "Failed to load glucose curve", detail: String(e) });
   }
 });
