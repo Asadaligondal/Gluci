@@ -6,7 +6,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -19,18 +18,13 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.gluci.mvp.data.GluciCurvePoint
-import app.gluci.mvp.screens.reachableMediaUrl
-import coil.compose.AsyncImage
 
 private fun verdictBadgeColors(verdict: String): Pair<Color, Color> {
     val v = verdict.trim().lowercase()
@@ -57,15 +51,15 @@ fun FoodResultCard(
     score: Float,
     verdict: String,
     tip: String,
+    foodName: String,
+    foodImageUrl: String?,
     curvePoints: List<GluciCurvePoint>,
     shareCardUrl: String?,
     onShare: () -> Unit,
     modifier: Modifier = Modifier,
-    peakCurveColor: Color = Color(0xFFF44336),
 ) {
     val outline = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)
     val shape = RoundedCornerShape(18.dp)
-    val previewUrl = remember(shareCardUrl) { shareCardUrl?.reachableMediaUrl() }
 
     Surface(
         modifier = modifier.fillMaxWidth(),
@@ -105,13 +99,10 @@ fun FoodResultCard(
                 }
             }
 
-            GlucoseCurveChart(curvePoints = curvePoints, peakColor = peakCurveColor)
-
-            Text(
-                text = "minutes after eating",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f),
-                modifier = Modifier.align(Alignment.CenterHorizontally),
+            GlucoseCurveChart(
+                curvePoints = curvePoints,
+                foodName = foodName,
+                foodImageUrl = foodImageUrl,
             )
 
             if (tip.isNotBlank()) {
@@ -127,18 +118,6 @@ fun FoodResultCard(
                         modifier = Modifier.padding(14.dp),
                     )
                 }
-            }
-
-            previewUrl?.let { url ->
-                AsyncImage(
-                    model = url,
-                    contentDescription = "Share card preview",
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(120.dp)
-                        .clip(RoundedCornerShape(12.dp)),
-                )
             }
 
             Button(

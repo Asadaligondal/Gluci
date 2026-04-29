@@ -65,6 +65,7 @@ data class ChatResponse(
     val verdict: String?,
     val intent: String?,
     val tip: String?,
+    val food: String? = null,
     val glucoseCurve: List<GluciCurvePoint>?,
     val topOrders: List<TopOrder>?,
     @SerializedName("shareCardUrl") val shareCardUrl: String?,
@@ -98,6 +99,7 @@ data class HistoryMessage(
     val intent: String? = null,
     val shareCardUrl: String? = null,
     val tip: String? = null,
+    val food: String? = null,
     /** Present on assistant bubbles when backend stored glucose curve in metadata. */
     val glucoseCurve: JsonElement? = null,
 )

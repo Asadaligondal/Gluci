@@ -50,6 +50,8 @@ data class UiMessage(
     val shareLandingUrl: String? = null,
     val glucoseCurve: List<GluciCurvePoint>? = null,
     val tip: String? = null,
+    val food: String? = null,
+    val mealImageUrl: String? = null,
     val outgoingStatus: OutgoingStatus = OutgoingStatus.None,
     val createdAtMs: Long? = null,
 )
@@ -463,20 +465,41 @@ class GluciViewModel(app: Application) : AndroidViewModel(app) {
             try {
                 val t = _token.value!!
                 val h = api.history("Bearer $t", id)
-                _messages.value = h.messages.map {
-                    UiMessage(
-                        id = it.id,
-                        role = it.role,
-                        content = it.content,
-                        imageUrl = it.imageUrl,
-                        score = it.score,
-                        verdict = it.verdict,
-                        intent = it.intent,
-                        shareCardUrl = it.shareCardUrl,
-                        glucoseCurve = it.glucoseCurve.parseGlucoseCurve(),
-                        tip = it.tip,
-                    )
+                val rows = mutableListOf<UiMessage>()
+                var pendingMealImage: String? = null
+                for (it in h.messages) {
+                    if (it.role == "user") {
+                        pendingMealImage = it.imageUrl?.takeIf { url -> !url.isNullOrBlank() }
+                        rows.add(
+                            UiMessage(
+                                id = it.id,
+                                role = it.role,
+                                content = it.content,
+                                imageUrl = it.imageUrl,
+                                createdAtMs = null,
+                            ),
+                        )
+                    } else {
+                        rows.add(
+                            UiMessage(
+                                id = it.id,
+                                role = it.role,
+                                content = it.content,
+                                imageUrl = it.imageUrl,
+                                score = it.score,
+                                verdict = it.verdict,
+                                intent = it.intent,
+                                shareCardUrl = it.shareCardUrl,
+                                glucoseCurve = it.glucoseCurve.parseGlucoseCurve(),
+                                tip = it.tip,
+                                food = it.food,
+                                mealImageUrl = pendingMealImage,
+                                createdAtMs = null,
+                            ),
+                        )
+                    }
                 }
+                _messages.value = rows
                 onReady()
             } catch (e: Exception) {
                 if (isUnauthorized(e)) handleUnauthorized()
@@ -519,6 +542,8 @@ class GluciViewModel(app: Application) : AndroidViewModel(app) {
                     shareLandingUrl = out.shareLandingUrl,
                     glucoseCurve = out.glucoseCurve,
                     tip = out.tip,
+                    food = out.food,
+                    mealImageUrl = null,
                 )
                 handlePaywall(out.paywall?.checkoutUrl)
                 refreshConversations()
@@ -576,6 +601,8 @@ class GluciViewModel(app: Application) : AndroidViewModel(app) {
                     shareLandingUrl = out.shareLandingUrl,
                     glucoseCurve = out.glucoseCurve,
                     tip = out.tip,
+                    food = out.food,
+                    mealImageUrl = out.userImageUrl,
                 )
                 handlePaywall(out.paywall?.checkoutUrl)
                 refreshConversations()
@@ -620,6 +647,8 @@ class GluciViewModel(app: Application) : AndroidViewModel(app) {
                     shareLandingUrl = out.shareLandingUrl,
                     glucoseCurve = out.glucoseCurve,
                     tip = out.tip,
+                    food = out.food,
+                    mealImageUrl = null,
                 )
                 handlePaywall(out.paywall?.checkoutUrl)
                 refreshConversations()
@@ -696,6 +725,8 @@ class GluciViewModel(app: Application) : AndroidViewModel(app) {
         shareLandingUrl: String? = null,
         glucoseCurve: List<GluciCurvePoint>? = null,
         tip: String? = null,
+        food: String? = null,
+        mealImageUrl: String? = null,
     ) {
         val now = System.currentTimeMillis()
         val cur = _messages.value.toMutableList()
@@ -719,6 +750,8 @@ class GluciViewModel(app: Application) : AndroidViewModel(app) {
                 shareLandingUrl = shareLandingUrl,
                 glucoseCurve = glucoseCurve,
                 tip = tip,
+                food = food,
+                mealImageUrl = mealImageUrl,
                 createdAtMs = now,
             ),
         )
@@ -735,6 +768,8 @@ class GluciViewModel(app: Application) : AndroidViewModel(app) {
         shareLandingUrl: String? = null,
         glucoseCurve: List<GluciCurvePoint>? = null,
         tip: String? = null,
+        food: String? = null,
+        mealImageUrl: String? = null,
     ) {
         val now = System.currentTimeMillis()
         _lastFoodInsight.value = LastFoodInsight(glucoseCurve, score?.toFloat(), verdict, tip)
@@ -748,6 +783,8 @@ class GluciViewModel(app: Application) : AndroidViewModel(app) {
             shareLandingUrl = shareLandingUrl,
             glucoseCurve = glucoseCurve,
             tip = tip,
+            food = food,
+            mealImageUrl = mealImageUrl,
             createdAtMs = now,
         )
     }

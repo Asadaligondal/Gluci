@@ -55,6 +55,7 @@ export async function handleChatTurn(params: {
   shareLandingUrl?: string;
   userImageUrl?: string;
   paywall?: { message: string; checkoutUrl?: string };
+  food?: string;
 }> {
   const cfg = getConfig();
   const user = await prisma.user.findUniqueOrThrow({
@@ -181,6 +182,8 @@ export async function handleChatTurn(params: {
     knowledgeContext,
   });
 
+  const foodLabel = summarizeFoodInput(enriched || llmUserText) || undefined;
+
   let shareCardUrl: string | undefined;
   let shareLandingUrl: string | undefined;
   /** Share card for any counted food decision (LLM often omits suggestShareCard). */
@@ -200,6 +203,7 @@ export async function handleChatTurn(params: {
       subtitle: `Join Gluci: ${shareLandingUrl}`,
       heroImagePath: heroAbs,
       glucoseCurve: structured.glucoseCurve,
+      foodName: foodLabel,
     });
     shareCardUrl = card.relativeUrl;
     void logAnalytics({
@@ -225,7 +229,7 @@ export async function handleChatTurn(params: {
         shareCardUrl,
         glucoseCurve: structured.glucoseCurve ?? null,
         tip: structured.tip ?? null,
-        food: summarizeFoodInput(enriched || llmUserText) || undefined,
+        food: foodLabel,
       }),
     },
   });
@@ -276,5 +280,6 @@ export async function handleChatTurn(params: {
     shareCardUrl,
     shareLandingUrl,
     userImageUrl: userImageFilename ? `${base}/static/uploads/${userImageFilename}` : undefined,
+    food: foodLabel,
   };
 }

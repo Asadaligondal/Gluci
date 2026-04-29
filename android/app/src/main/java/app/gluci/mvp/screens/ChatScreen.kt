@@ -508,15 +508,14 @@ private fun ChatMessageBubble(
         }
         if (hasFoodCurve) {
             val curve = m.glucoseCurve!!
-            val peak = curve.maxOf { it.mgDl }.toFloat()
-            val peakColor = GluciViewModel.getCurveColor(peak)
             FoodResultCard(
                 score = (m.score ?: 0.0).toFloat(),
                 verdict = m.verdict ?: "",
                 tip = m.tip.orEmpty(),
+                foodName = m.food?.takeIf { !it.isNullOrBlank() } ?: fallbackFoodTitle(m.content),
+                foodImageUrl = m.mealImageUrl,
                 curvePoints = curve,
                 shareCardUrl = m.shareCardUrl,
-                peakCurveColor = peakColor,
                 onShare = {
                     val url = m.shareCardUrl ?: return@FoodResultCard
                     val caption =
@@ -735,5 +734,10 @@ private fun ChatInputBar(
             }
         }
     }
+}
+
+private fun fallbackFoodTitle(reply: String): String {
+    val line = reply.lineSequence().firstOrNull { it.isNotBlank() } ?: return "Your meal"
+    return line.take(56).trim()
 }
 
