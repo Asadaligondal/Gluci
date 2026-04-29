@@ -11,3 +11,25 @@ android/.gradle/
 local.properties
 *.keystore
 .DS_Store
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.Python
+venv/
+.venv/
+env/
+ENV/
+whisper_env/
+
+# Large local artifacts — regenerate from scripts
+videos/
+
+# Scraped / pipeline outputs (not source code)
+Raw_reels_data.json
+instagram_raw.json
+knowledge_base_clean.json
+knowledge_base_enriched.json
+knowledge_base_raw.json
+reel_urls.json
