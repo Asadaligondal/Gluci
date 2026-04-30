@@ -1,14 +1,14 @@
 package app.gluci.mvp.ui.components
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -18,12 +18,12 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
@@ -42,21 +42,11 @@ import app.gluci.mvp.screens.reachableMediaUrl
 import coil.compose.AsyncImage
 import kotlin.math.min
 
-private val ZonePink = Color(0xFFFFDDE1)
-private val ZoneGreen = Color(0xFFD6F0E0)
-private val ThresholdLine = Color(0xFFBDBDBD)
-private val AxisGray = Color(0xFF9E9E9E)
-private val LabelBorder = Color(0xFFDDDDDD)
+private val ZonePink = Color(0xFFFFCDD2)
+private val ZoneGreen = Color(0xFFC8E6C9)
+private val SeparatorGray = Color(0xFFDDDDDD)
 
 private const val MaxMgDl = 80f
-private const val ThresholdMg = 30f
-
-private fun curveFillColorForPeak(peakMgDl: Double): Color =
-    when {
-        peakMgDl < 25.0 -> Color(0xFF2E7D32)
-        peakMgDl < 50.0 -> Color(0xFFE65100)
-        else -> Color(0xFF1A1A1A)
-    }
 
 @Composable
 fun GlucoseCurveChart(
@@ -68,49 +58,72 @@ fun GlucoseCurveChart(
     val resolvedImg = remember(foodImageUrl) { foodImageUrl?.reachableMediaUrl() }
     val title = remember(foodName) { foodName.trim().ifEmpty { "Your meal" } }
 
+    val peak = curvePoints.maxOfOrNull { it.mgDl.toFloat() } ?: 0f
+    val curveColor = when {
+        peak < 20f -> Color(0xFF2E7D32)
+        peak < 50f -> Color(0xFFE65100)
+        else -> Color(0xFFC62828)
+    }
+
     Card(
         modifier = modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = Color.White),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-        shape = RoundedCornerShape(12.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 3.dp),
+        shape = RoundedCornerShape(14.dp),
     ) {
-        Column(Modifier.fillMaxWidth()) {
+        Column {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(180.dp),
+                    .height(200.dp),
             ) {
-                Column(
+                Box(
                     modifier = Modifier
-                        .width(52.dp)
-                        .fillMaxHeight()
-                        .padding(bottom = 20.dp, top = 4.dp, end = 4.dp),
+                        .width(56.dp)
+                        .fillMaxHeight(),
                 ) {
-                    Spacer(Modifier.weight(0.1f))
-                    Text(
-                        text = "+60",
-                        fontSize = 9.sp,
-                        color = AxisGray,
-                        textAlign = TextAlign.End,
-                        modifier = Modifier.fillMaxWidth(),
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.CenterEnd)
+                            .width(1.dp)
+                            .fillMaxHeight()
+                            .background(SeparatorGray),
                     )
-                    Spacer(Modifier.weight(0.35f))
-                    Text(
-                        text = "spike\n+30",
-                        fontSize = 9.sp,
-                        color = AxisGray,
-                        textAlign = TextAlign.End,
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                    Spacer(Modifier.weight(0.35f))
-                    Text(
-                        text = "baseline",
-                        fontSize = 9.sp,
-                        color = AxisGray,
-                        textAlign = TextAlign.End,
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                    Spacer(Modifier.weight(0.1f))
+                    Column(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(end = 8.dp, top = 8.dp, bottom = 8.dp),
+                        verticalArrangement = Arrangement.SpaceBetween,
+                    ) {
+                        Text(
+                            "+60",
+                            fontSize = 12.sp,
+                            color = Color(0xFF555555),
+                            textAlign = TextAlign.End,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(end = 4.dp),
+                        )
+                        Text(
+                            "spike\n+30",
+                            fontSize = 12.sp,
+                            color = Color(0xFF555555),
+                            textAlign = TextAlign.End,
+                            lineHeight = 14.sp,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(end = 4.dp),
+                        )
+                        Text(
+                            "baseline",
+                            fontSize = 12.sp,
+                            color = Color(0xFF555555),
+                            textAlign = TextAlign.End,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(end = 4.dp),
+                        )
+                    }
                 }
 
                 Box(
@@ -118,10 +131,10 @@ fun GlucoseCurveChart(
                         .weight(1f)
                         .fillMaxHeight(),
                 ) {
-                    Canvas(modifier = Modifier.fillMaxWidth().fillMaxHeight()) {
+                    Canvas(modifier = Modifier.fillMaxSize()) {
                         val w = size.width
                         val h = size.height
-                        val thresholdY = h * (1f - ThresholdMg / MaxMgDl)
+                        val thresholdY = h * (1f - 30f / MaxMgDl)
 
                         drawRect(
                             color = ZoneGreen,
@@ -134,30 +147,28 @@ fun GlucoseCurveChart(
                             size = Size(w, thresholdY),
                         )
 
-                        val dashWidth = 8.dp.toPx()
-                        val gapWidth = 4.dp.toPx()
-                        var x = 0f
-                        while (x < w) {
+                        val dashW = 8.dp.toPx()
+                        val gapW = 4.dp.toPx()
+                        var xPos = 0f
+                        while (xPos < w) {
                             drawLine(
-                                color = ThresholdLine,
-                                start = Offset(x, thresholdY),
-                                end = Offset(min(x + dashWidth, w), thresholdY),
-                                strokeWidth = 1.dp.toPx(),
+                                color = Color(0xFFE57373),
+                                start = Offset(xPos, thresholdY),
+                                end = Offset(min(xPos + dashW, w), thresholdY),
+                                strokeWidth = 1.5.dp.toPx(),
                             )
-                            x += dashWidth + gapWidth
+                            xPos += dashW + gapW
                         }
 
                         if (curvePoints.size < 2) return@Canvas
 
                         val mapped = curvePoints.map { pt ->
+                            val yn = (pt.mgDl.toFloat() / MaxMgDl).coerceIn(0f, 1f)
                             Offset(
                                 x = (pt.minute / 120f) * w,
-                                y = h - (pt.mgDl.toFloat() / MaxMgDl).coerceIn(0f, 1f) * h,
+                                y = h - yn * h,
                             )
                         }
-
-                        val peak = curvePoints.maxOf { it.mgDl }
-                        val curveColor = curveFillColorForPeak(peak)
 
                         val fillPath = Path().apply {
                             moveTo(mapped.first().x, h)
@@ -172,7 +183,7 @@ fun GlucoseCurveChart(
                             lineTo(mapped.last().x, h)
                             close()
                         }
-                        drawPath(path = fillPath, color = curveColor)
+                        drawPath(path = fillPath, color = curveColor.copy(alpha = 0.92f))
 
                         val strokePath = Path().apply {
                             moveTo(mapped.first().x, mapped.first().y)
@@ -186,51 +197,71 @@ fun GlucoseCurveChart(
                         }
                         drawPath(
                             path = strokePath,
-                            color = curveColor.copy(alpha = 0.7f),
+                            color = curveColor.copy(alpha = 0.95f),
                             style = Stroke(
-                                width = 2.dp.toPx(),
+                                width = 2.5.dp.toPx(),
                                 cap = StrokeCap.Round,
                                 join = StrokeJoin.Round,
                             ),
                         )
+
+                        val peakIdx = curvePoints.indices.maxByOrNull { curvePoints[it].mgDl }
+                            ?: return@Canvas
+                        val peakCenter = mapped[peakIdx.coerceIn(0, mapped.lastIndex)]
+                        drawCircle(
+                            color = Color.White,
+                            radius = 6.dp.toPx(),
+                            center = peakCenter,
+                        )
+                        drawCircle(
+                            color = curveColor,
+                            radius = 4.dp.toPx(),
+                            center = peakCenter,
+                        )
                     }
 
-                    Box(
+                    Surface(
                         modifier = Modifier
-                            .padding(8.dp)
+                            .padding(10.dp)
                             .align(Alignment.TopStart)
-                            .background(Color.White, RoundedCornerShape(6.dp))
-                            .border(1.dp, LabelBorder, RoundedCornerShape(6.dp))
-                            .padding(horizontal = 8.dp, vertical = 4.dp),
+                            .widthIn(max = 110.dp),
+                        color = Color.White,
+                        shape = RoundedCornerShape(6.dp),
+                        border = BorderStroke(1.dp, Color(0xFFCCCCCC)),
+                        shadowElevation = 2.dp,
                     ) {
                         Text(
                             text = title,
                             fontSize = 11.sp,
-                            fontWeight = FontWeight.Medium,
+                            fontWeight = FontWeight.SemiBold,
                             color = Color(0xFF1A1A1A),
                             maxLines = 2,
                             overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.widthIn(max = 100.dp),
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
                         )
                     }
                 }
 
                 Box(
                     modifier = Modifier
-                        .width(90.dp)
+                        .width(80.dp)
                         .fillMaxHeight()
-                        .padding(4.dp),
+                        .padding(6.dp),
                     contentAlignment = Alignment.Center,
                 ) {
                     resolvedImg?.let { url ->
-                        AsyncImage(
-                            model = url,
-                            contentDescription = title,
-                            contentScale = ContentScale.Crop,
-                            modifier = Modifier
-                                .size(80.dp)
-                                .clip(RoundedCornerShape(8.dp)),
-                        )
+                        Card(
+                            shape = RoundedCornerShape(10.dp),
+                            elevation = CardDefaults.cardElevation(defaultElevation = 3.dp),
+                            border = BorderStroke(2.dp, Color.White),
+                        ) {
+                            AsyncImage(
+                                model = url,
+                                contentDescription = title,
+                                contentScale = ContentScale.Crop,
+                                modifier = Modifier.size(64.dp),
+                            )
+                        }
                     }
                 }
             }
@@ -238,11 +269,19 @@ fun GlucoseCurveChart(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(start = 56.dp, end = 94.dp, top = 2.dp, bottom = 6.dp),
+                    .padding(start = 60.dp, end = 84.dp, top = 4.dp, bottom = 8.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
             ) {
-                Text("eating time", fontSize = 9.sp, color = AxisGray)
-                Text("+ 2 hours", fontSize = 9.sp, color = AxisGray)
+                Text(
+                    "eating time",
+                    fontSize = 11.sp,
+                    color = Color(0xFF555555),
+                )
+                Text(
+                    "+ 2 hours",
+                    fontSize = 11.sp,
+                    color = Color(0xFF555555),
+                )
             }
         }
     }

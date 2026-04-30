@@ -38,10 +38,21 @@ const EXTRACTION_SYSTEM = `When food is present, output ONLY this JSON:
   ]
 }
 Be specific with ingredient names.
-Estimate realistic portion sizes.
 List each ingredient separately.
 If no food: { "intent": "chat" }
-Respond ONLY with valid JSON.`;
+Respond ONLY with valid JSON.
+
+IMPORTANT RULES FOR PORTION ESTIMATION:
+- Be CONSERVATIVE with portions — underestimate rather than overestimate
+- A typical restaurant serving of protein = 120-150g
+- A typical side of vegetables = 80-100g
+- A bowl of salad = 150g total ingredients
+- A plate of rice = 150g cooked rice
+- When in doubt, use smaller portions
+- List protein and vegetables as SEPARATE ingredients
+- Do not group everything as one item
+- For salads: list each major component separately
+  e.g. lettuce 80g, tomato 40g, cucumber 30g — NOT "salad bowl 300g"`;
 
 function buildKnowledgePrompt(knowledgeContext: KnowledgeResult[]): string {
   if (!knowledgeContext.length) return "";

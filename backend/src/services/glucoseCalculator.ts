@@ -67,35 +67,35 @@ export async function lookupFoodGI(foodName: string): Promise<{ gi: number; carb
 
 export function estimatePortions(gptIngredients: Array<{ name: string; amount: string }>): FoodIngredient[] {
   const PORTION_MAP: Record<string, number> = {
-    cup: 240,
-    cups: 240,
-    tbsp: 15,
-    tablespoon: 15,
-    tablespoons: 15,
-    tsp: 5,
-    teaspoon: 5,
-    oz: 28,
-    ounce: 28,
-    ounces: 28,
-    lb: 454,
-    pound: 454,
-    slice: 30,
-    slices: 30,
-    piece: 100,
-    pieces: 100,
-    handful: 30,
-    small: 80,
-    medium: 150,
-    large: 220,
-    plate: 300,
-    bowl: 250,
-    serving: 150,
-    portion: 150,
+    cup: 180,
+    cups: 180,
+    tbsp: 12,
+    tablespoon: 12,
+    tablespoons: 12,
+    tsp: 4,
+    teaspoon: 4,
+    oz: 25,
+    ounce: 25,
+    ounces: 25,
+    lb: 400,
+    pound: 400,
+    slice: 25,
+    slices: 25,
+    piece: 80,
+    pieces: 80,
+    handful: 25,
+    small: 60,
+    medium: 120,
+    large: 180,
+    plate: 220,
+    bowl: 180,
+    serving: 120,
+    portion: 120,
   };
 
   return gptIngredients.map((ing) => {
     const amount = ing.amount.toLowerCase();
-    let grams = 100;
+    let grams = 80;
 
     const numMatch = amount.match(/(\d+\.?\d*)/);
     const num = numMatch ? parseFloat(numMatch[1]) : 1;
@@ -114,7 +114,7 @@ export function estimatePortions(gptIngredients: Array<{ name: string; amount: s
       }
     }
 
-    return { name: ing.name, portionGrams: Math.min(grams, 800) };
+    return { name: ing.name, portionGrams: Math.min(grams, 600) };
   });
 }
 
@@ -215,13 +215,55 @@ export async function calculateMealGlucose(ingredients: FoodIngredient[]): Promi
 
   const mealGL = (mealGI / 100) * totalCarbs;
 
-  const peakMgDl = Math.min(mealGL * 1.8, 120);
+  // Protein and fat dampening — slows glucose absorption (established nutritional science)
+  const totalProteinG = ingredients.reduce((s, ing) => {
+    const n = ing.name.toLowerCase();
+    const proteinPer100 = /meat|chicken|fish|egg|beef|pork|turkey|tuna|salmon|shrimp/.test(n) ? 25
+      : /cheese|dairy|milk|yogurt/.test(n) ? 8
+      : /bean|lentil|legume|tofu/.test(n) ? 9
+      : 2;
+    return s + (proteinPer100 / 100) * ing.portionGrams;
+  }, 0);
+
+  const totalFatG = ingredients.reduce((s, ing) => {
+    const n = ing.name.toLowerCase();
+    const fatPer100 = /oil|butter|lard|mayo|avocado/.test(n) ? 80
+      : /meat|chicken|fish|beef|pork|turkey/.test(n) ? 8
+      : /cheese|dairy|milk|yogurt/.test(n) ? 5
+      : /nut|seed|chip|snack/.test(n) ? 15
+      : 3;
+    return s + (fatPer100 / 100) * ing.portionGrams;
+  }, 0);
+
+  const proteinFatRatio = (totalProteinG + totalFatG) / Math.max(totalCarbs, 1);
+  const dampening = proteinFatRatio > 2 ? 0.5
+    : proteinFatRatio > 1 ? 0.65
+    : proteinFatRatio > 0.5 ? 0.8
+    : 1.0;
+
+  const effectiveGL = mealGL * dampening;
+
+  const peakMgDl = Math.min(effectiveGL * 1.5, 100);
   const peakMinute = Math.max(20, Math.min(75, Math.round(15 + mealGI * 0.45)));
 
-  const rawScore = 10 - mealGL / 2.5;
-  const score = Math.round(Math.max(1, Math.min(10, rawScore)) * 10) / 10;
+  const rawScore = 10 - effectiveGL / 4.0;
+  let score = Math.round(Math.max(1, Math.min(10, rawScore)) * 10) / 10;
+
+  // Minimum score floor for meals dominated by vegetables and protein
+  const totalPortionGrams = Math.max(ingredients.reduce((s, i) => s + i.portionGrams, 0), 1);
+  const vegProteinGrams = ingredients
+    .filter(i => {
+      const n = i.name.toLowerCase();
+      return /vegetable|salad|green|leaf|lettuce|spinach|kale|broccoli|tomato|cucumber|pepper|zucchini/.test(n)
+        || /chicken|fish|turkey|tuna|salmon|shrimp|beef|pork|egg/.test(n);
+    })
+    .reduce((s, i) => s + i.portionGrams, 0);
+  const vegProteinRatio = vegProteinGrams / totalPortionGrams;
+  if (vegProteinRatio > 0.8) score = Math.max(score, 6.5);
+  else if (vegProteinRatio > 0.6) score = Math.max(score, 5.0);
+
   const verdict: GlucoseCalculation["verdict"] =
-    score >= 7.5 ? "eat" : score >= 5 ? "modify" : "avoid";
+    score >= 7.0 ? "eat" : score >= 4.5 ? "modify" : "avoid";
 
   const minutes = [0, 15, 30, 45, 60, 90, 120];
   const curvePoints: CurvePoint[] = minutes.map((t) => {
@@ -241,7 +283,10 @@ export async function calculateMealGlucose(ingredients: FoodIngredient[]): Promi
   console.log("[glucoseCalc]", {
     mealGI: Math.round(mealGI),
     mealGL: Math.round(mealGL * 10) / 10,
+    effectiveGL: Math.round(effectiveGL * 10) / 10,
     totalCarbs: Math.round(totalCarbs * 10) / 10,
+    dampening,
+    vegProteinRatio: Math.round(vegProteinRatio * 100) / 100,
     peakMgDl,
     peakMinute,
     score,

@@ -1,13 +1,19 @@
 package app.gluci.mvp.ui.components
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.defaultMinSize
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Share
@@ -26,23 +32,23 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.gluci.mvp.data.GluciCurvePoint
 
-private fun verdictBadgeColors(verdict: String): Pair<Color, Color> {
-    val v = verdict.trim().lowercase()
+private fun verdictTone(raw: String): Triple<String, Color, Color> {
+    val v = raw.trim().lowercase()
     return when {
-        v.contains("avoid") -> Color(0xFFB71C1C) to Color.White
-        v.contains("modify") -> Color(0xFFE65100) to Color.White
-        v.contains("eat") -> Color(0xFF2E7D32) to Color.White
-        else -> Color(0xFF546E7A) to Color.White
+        v.contains("avoid") -> Triple("AVOID", Color(0xFFFFEBEE), Color(0xFFC62828))
+        v.contains("modify") -> Triple("MODIFY", Color(0xFFFFF3E0), Color(0xFFE65100))
+        v.contains("eat") -> Triple("EAT", Color(0xFFE8F5E9), Color(0xFF2E7D32))
+        else -> Triple(raw.uppercase().take(14), Color(0xFFF5F5F5), Color(0xFF424242))
     }
 }
 
-private fun verdictLabel(raw: String): String {
+private fun scoreColorForVerdict(raw: String): Color {
     val v = raw.trim().lowercase()
     return when {
-        v.contains("avoid") -> "AVOID"
-        v.contains("modify") -> "MODIFY"
-        v.contains("eat") -> "EAT"
-        else -> raw.uppercase().take(14)
+        v.contains("avoid") -> Color(0xFFC62828)
+        v.contains("modify") -> Color(0xFFE65100)
+        v.contains("eat") -> Color(0xFF2E7D32)
+        else -> Color(0xFF546E7A)
     }
 }
 
@@ -60,6 +66,8 @@ fun FoodResultCard(
 ) {
     val outline = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)
     val shape = RoundedCornerShape(18.dp)
+    val (badgeLabel, badgeBg, badgeFg) = verdictTone(verdict)
+    val scoreMainColor = scoreColorForVerdict(verdict)
 
     Surface(
         modifier = modifier.fillMaxWidth(),
@@ -75,26 +83,37 @@ fun FoodResultCard(
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Row(
-                Modifier.fillMaxWidth(),
+                Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 0.dp, vertical = 4.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text(
-                    text = String.format("%.1f/10", score),
-                    style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold),
-                    color = MaterialTheme.colorScheme.primary,
-                )
-                val (bg, fg) = verdictBadgeColors(verdict)
-                Surface(
-                    shape = RoundedCornerShape(50),
-                    color = bg,
+                Row(verticalAlignment = Alignment.Bottom) {
+                    Text(
+                        text = String.format("%.1f", score),
+                        fontSize = 36.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = scoreMainColor,
+                    )
+                    Text(
+                        text = "/10",
+                        fontSize = 18.sp,
+                        color = Color(0xFF888888),
+                        modifier = Modifier.padding(start = 2.dp, bottom = 4.dp),
+                    )
+                }
+                Box(
+                    modifier = Modifier
+                        .background(badgeBg, RoundedCornerShape(20.dp))
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
                 ) {
                     Text(
-                        text = verdictLabel(verdict),
-                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
-                        color = fg,
+                        text = badgeLabel,
+                        color = badgeFg,
                         fontWeight = FontWeight.Bold,
-                        fontSize = 13.sp,
+                        fontSize = 14.sp,
+                        maxLines = 1,
                     )
                 }
             }
@@ -106,30 +125,39 @@ fun FoodResultCard(
             )
 
             if (tip.isNotBlank()) {
-                Surface(
-                    shape = RoundedCornerShape(12.dp),
-                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f),
-                    modifier = Modifier.fillMaxWidth(),
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(Color(0xFFF8F9FA), RoundedCornerShape(10.dp))
+                        .padding(12.dp),
+                    verticalAlignment = Alignment.Top,
                 ) {
                     Text(
+                        text = "\uD83D\uDCA1",
+                        fontSize = 16.sp,
+                        modifier = Modifier.padding(end = 8.dp, top = 1.dp),
+                    )
+                    Text(
                         text = tip,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        modifier = Modifier.padding(14.dp),
+                        fontSize = 13.sp,
+                        color = Color(0xFF444444),
+                        lineHeight = 18.sp,
                     )
                 }
             }
 
             Button(
                 onClick = onShare,
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(48.dp),
                 enabled = shareCardUrl != null,
-                shape = RoundedCornerShape(28.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
+                shape = RoundedCornerShape(24.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1B5E20)),
             ) {
                 Icon(Icons.Filled.Share, contentDescription = null, modifier = Modifier.size(18.dp))
-                Spacer(Modifier.size(8.dp))
-                Text("Share GlucoseGal card")
+                Spacer(Modifier.width(8.dp))
+                Text("Share GlucoseGal card", fontSize = 15.sp, fontWeight = FontWeight.Medium)
             }
         }
     }

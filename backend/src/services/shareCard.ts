@@ -87,8 +87,8 @@ export function generateCurveSVG(points: CurvePoint[], width: number, totalHeigh
 }
 
 function scoreDisplayColor(score: number): string {
-  if (score >= 7.5) return "#2E7D32";
-  if (score >= 5) return "#E65100";
+  if (score >= 7.0) return "#2E7D32";
+  if (score >= 4.5) return "#E65100";
   return "#C62828";
 }
 
