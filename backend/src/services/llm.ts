@@ -2,6 +2,7 @@ import OpenAI from "openai";
 import { z } from "zod";
 import { getConfig } from "../config.js";
 import type { KnowledgeResult } from "./knowledgeBase.js";
+import type { GlucoseCalculation } from "./glucoseCalculator.js";
 
 const TopOrderSchema = z.object({
   name: z.string(),
@@ -19,7 +20,28 @@ export type GluciResponse = {
   topOrders?: { name: string; score: number; tweaks: string }[];
   glucoseCurve?: { minute: number; mg_dl: number }[];
   tip?: string;
+  mealGI?: number;
+  mealGL?: number;
+  confidence?: "high" | "medium" | "low";
 };
+
+export type FoodExtraction =
+  | { intent: "meal"; foodName: string; ingredients: { name: string; amount: string }[] }
+  | { intent: "chat" };
+
+const EXTRACTION_SYSTEM = `When food is present, output ONLY this JSON:
+{
+  "intent": "meal",
+  "foodName": "descriptive meal name",
+  "ingredients": [
+    { "name": "ingredient name", "amount": "portion size" }
+  ]
+}
+Be specific with ingredient names.
+Estimate realistic portion sizes.
+List each ingredient separately.
+If no food: { "intent": "chat" }
+Respond ONLY with valid JSON.`;
 
 function buildKnowledgePrompt(knowledgeContext: KnowledgeResult[]): string {
   if (!knowledgeContext.length) return "";
@@ -152,6 +174,11 @@ export function normalizeGluciResponse(raw: unknown): GluciResponse {
   const tip = typeof o.tip === "string" ? o.tip : undefined;
   const topOrders = parseTopOrders(o.topOrders);
 
+  const mealGI = typeof o.mealGI === "number" ? o.mealGI : undefined;
+  const mealGL = typeof o.mealGL === "number" ? o.mealGL : undefined;
+  const confidence =
+    o.confidence === "high" || o.confidence === "medium" || o.confidence === "low" ? o.confidence : undefined;
+
   return {
     userReply: combinedMessage || userReply || message || "",
     glucoseGalScore,
@@ -162,11 +189,123 @@ export function normalizeGluciResponse(raw: unknown): GluciResponse {
     topOrders,
     glucoseCurve,
     tip,
+    mealGI,
+    mealGL,
+    confidence,
   };
 }
 
 export function getOpenAIClient(): OpenAI {
   return new OpenAI({ apiKey: getConfig().OPENAI_API_KEY });
+}
+
+function parseFoodExtraction(raw: unknown): FoodExtraction {
+  const o = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
+  const intent = o.intent === "meal" ? "meal" : "chat";
+  if (intent !== "meal") return { intent: "chat" };
+  const foodName = typeof o.foodName === "string" ? o.foodName.trim() : "";
+  const ingRaw = o.ingredients;
+  const ingredients: { name: string; amount: string }[] = [];
+  if (Array.isArray(ingRaw)) {
+    for (const row of ingRaw) {
+      if (!row || typeof row !== "object") continue;
+      const r = row as Record<string, unknown>;
+      const name = typeof r.name === "string" ? r.name.trim() : "";
+      const amount = typeof r.amount === "string" ? r.amount.trim() : typeof r.portion === "string" ? r.portion.trim() : "1 serving";
+      if (name) ingredients.push({ name, amount: amount || "1 serving" });
+    }
+  }
+  if (!foodName || ingredients.length === 0) return { intent: "chat" };
+  return { intent: "meal", foodName, ingredients };
+}
+
+export async function extractFoodIngredients(params: {
+  userText: string;
+  imageBase64?: string;
+  mimeType?: string;
+}): Promise<FoodExtraction> {
+  const client = getOpenAIClient();
+  const model = params.imageBase64 && params.mimeType ? "gpt-4o" : "gpt-4o-mini";
+  const userContent: OpenAI.Chat.ChatCompletionContentPart[] = [
+    { type: "text", text: params.userText || "What food is shown?" },
+  ];
+  if (params.imageBase64 && params.mimeType) {
+    userContent.push({
+      type: "image_url",
+      image_url: { url: `data:${params.mimeType};base64,${params.imageBase64}` },
+    });
+  }
+
+  const completion = await client.chat.completions.create({
+    model,
+    messages: [
+      { role: "system", content: EXTRACTION_SYSTEM },
+      { role: "user", content: userContent },
+    ],
+    response_format: { type: "json_object" },
+    temperature: 0.2,
+    max_tokens: 800,
+  });
+  const raw = completion.choices[0]?.message?.content;
+  if (!raw) return { intent: "chat" };
+  try {
+    return parseFoodExtraction(JSON.parse(raw) as unknown);
+  } catch {
+    return { intent: "chat" };
+  }
+}
+
+const FoodReplySchema = z.object({
+  message: z.string(),
+  tip: z.string(),
+});
+
+export async function generateFoodReply(
+  foodName: string,
+  calc: GlucoseCalculation,
+  knowledgeContext: KnowledgeResult[],
+): Promise<{ message: string; tip: string }> {
+  const science = knowledgeContext.map((k) => k.key_tip).filter(Boolean).join("\n");
+  const verdictLower = calc.verdict;
+  const system = `You are Gluci, a friendly glucose coach.
+Speak like glucosegoddess — warm, scientific, practical.
+
+The user ate: ${foodName}
+Glucose score: ${calc.score}/10
+Verdict: ${verdictLower}
+Estimated peak: +${calc.peakMgDl} mg/dL at ${calc.peakMinute} minutes
+Meal GI: ${calc.mealGI}, GL: ${calc.mealGL}
+
+Relevant science:
+${science || "(none)"}
+
+Write a JSON response:
+{
+  "message": "2-3 sentence friendly explanation of what will happen to their glucose and why",
+  "tip": "One specific actionable tip to improve this meal or reduce the spike"
+}
+Do not mention GI or GL numbers to the user.
+Do not say 'according to our database'.
+Speak naturally.
+Respond ONLY with valid JSON.`;
+
+  const client = getOpenAIClient();
+  const completion = await client.chat.completions.create({
+    model: "gpt-4o-mini",
+    messages: [{ role: "system", content: system }],
+    response_format: { type: "json_object" },
+    temperature: 0.7,
+    max_tokens: 500,
+  });
+  const raw = completion.choices[0]?.message?.content;
+  if (!raw) return { message: "Thanks for checking in — this meal should move your glucose in a predictable way.", tip: "Try adding protein or veggies first next time." };
+  try {
+    const parsed = FoodReplySchema.safeParse(JSON.parse(raw) as unknown);
+    if (parsed.success) return { message: parsed.data.message.trim(), tip: parsed.data.tip.trim() };
+  } catch {
+    /* fall through */
+  }
+  return { message: "Thanks for checking in — this meal should move your glucose in a predictable way.", tip: "Try adding protein or veggies first next time." };
 }
 
 export async function runGluciTurn(params: {

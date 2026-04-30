@@ -54,6 +54,8 @@ data class UiMessage(
     val mealImageUrl: String? = null,
     val outgoingStatus: OutgoingStatus = OutgoingStatus.None,
     val createdAtMs: Long? = null,
+    /** Backend hybrid scorer: show gentle "estimated" UX when low. */
+    val confidence: String? = null,
 )
 
 data class LastFoodInsight(
@@ -494,6 +496,7 @@ class GluciViewModel(app: Application) : AndroidViewModel(app) {
                                 tip = it.tip,
                                 food = it.food,
                                 mealImageUrl = pendingMealImage,
+                                confidence = it.confidence,
                                 createdAtMs = null,
                             ),
                         )
@@ -544,6 +547,7 @@ class GluciViewModel(app: Application) : AndroidViewModel(app) {
                     tip = out.tip,
                     food = out.food,
                     mealImageUrl = null,
+                    confidence = out.confidence,
                 )
                 handlePaywall(out.paywall?.checkoutUrl)
                 refreshConversations()
@@ -603,6 +607,7 @@ class GluciViewModel(app: Application) : AndroidViewModel(app) {
                     tip = out.tip,
                     food = out.food,
                     mealImageUrl = out.userImageUrl,
+                    confidence = out.confidence,
                 )
                 handlePaywall(out.paywall?.checkoutUrl)
                 refreshConversations()
@@ -649,6 +654,7 @@ class GluciViewModel(app: Application) : AndroidViewModel(app) {
                     tip = out.tip,
                     food = out.food,
                     mealImageUrl = null,
+                    confidence = out.confidence,
                 )
                 handlePaywall(out.paywall?.checkoutUrl)
                 refreshConversations()
@@ -727,6 +733,7 @@ class GluciViewModel(app: Application) : AndroidViewModel(app) {
         tip: String? = null,
         food: String? = null,
         mealImageUrl: String? = null,
+        confidence: String? = null,
     ) {
         val now = System.currentTimeMillis()
         val cur = _messages.value.toMutableList()
@@ -752,6 +759,7 @@ class GluciViewModel(app: Application) : AndroidViewModel(app) {
                 tip = tip,
                 food = food,
                 mealImageUrl = mealImageUrl,
+                confidence = confidence,
                 createdAtMs = now,
             ),
         )
@@ -770,6 +778,7 @@ class GluciViewModel(app: Application) : AndroidViewModel(app) {
         tip: String? = null,
         food: String? = null,
         mealImageUrl: String? = null,
+        confidence: String? = null,
     ) {
         val now = System.currentTimeMillis()
         _lastFoodInsight.value = LastFoodInsight(glucoseCurve, score?.toFloat(), verdict, tip)
@@ -785,6 +794,7 @@ class GluciViewModel(app: Application) : AndroidViewModel(app) {
             tip = tip,
             food = food,
             mealImageUrl = mealImageUrl,
+            confidence = confidence,
             createdAtMs = now,
         )
     }

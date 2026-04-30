@@ -72,6 +72,10 @@ data class ChatResponse(
     @SerializedName("userImageUrl") val userImageUrl: String? = null,
     @SerializedName("shareLandingUrl") val shareLandingUrl: String? = null,
     val paywall: PaywallInfo?,
+    /** Hybrid meal scoring — internal diagnostics; UI uses confidence for badge only. */
+    @SerializedName("mealGI") val mealGI: Double? = null,
+    @SerializedName("mealGL") val mealGL: Double? = null,
+    val confidence: String? = null,
 )
 
 data class TopOrder(
@@ -102,6 +106,9 @@ data class HistoryMessage(
     val food: String? = null,
     /** Present on assistant bubbles when backend stored glucose curve in metadata. */
     val glucoseCurve: JsonElement? = null,
+    @SerializedName("mealGI") val mealGI: Double? = null,
+    @SerializedName("mealGL") val mealGL: Double? = null,
+    val confidence: String? = null,
 )
 
 data class ProfilePatch(

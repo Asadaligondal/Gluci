@@ -566,27 +566,41 @@ private fun ChatMessageBubble(
 private fun InsightStrip(m: UiMessage) {
     val scoreStr = m.score?.let { String.format("%.1f/10", it) } ?: "—"
     val verdictShort = m.verdict?.takeIf { it.isNotBlank() } ?: "—"
-    Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(top = 16.dp),
-        shape = RoundedCornerShape(14.dp),
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f),
-    ) {
-        Row(
+        Surface(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 20.dp, vertical = 18.dp),
-            verticalAlignment = Alignment.CenterVertically,
+                .padding(top = 16.dp),
+            shape = RoundedCornerShape(14.dp),
+            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f),
         ) {
-            InsightCell(Modifier.weight(1f), "Score", scoreStr)
-            VerticalDivider(
-                modifier = Modifier.height(48.dp),
-                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f),
-            )
-            InsightCell(Modifier.weight(1f), "Verdict", verdictShort)
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp, vertical = 18.dp),
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    InsightCell(Modifier.weight(1f), "Score", scoreStr)
+                    VerticalDivider(
+                        modifier = Modifier.height(48.dp),
+                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f),
+                    )
+                    InsightCell(Modifier.weight(1f), "Verdict", verdictShort)
+                }
+                if (m.confidence.equals("low", ignoreCase = true)) {
+                    Text(
+                        text = "Estimated — partial ingredient match",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MutedCaption,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 10.dp),
+                    )
+                }
+            }
         }
-    }
 }
 
 @Composable

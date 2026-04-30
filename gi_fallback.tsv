@@ -1,0 +1,200 @@
+name|gi|carbs|category
+white rice|72|28|grain
+brown rice|50|23|grain
+basmati rice|57|25|grain
+jasmine rice|68|27|grain
+wild rice|45|21|grain
+white bread|75|49|bread
+whole wheat bread|69|41|bread
+sourdough bread|54|45|bread
+rye bread|58|48|bread
+multigrain bread|65|43|bread
+pita bread|68|55|bread
+naan bread|71|50|bread
+chapati|62|43|bread
+bagel|72|53|bread
+croissant|67|46|bread
+white pasta|49|30|grain
+whole wheat pasta|42|29|grain
+spaghetti|46|30|grain
+macaroni|47|30|grain
+rice noodles|61|25|grain
+udon noodles|55|22|grain
+oats|55|27|grain
+rolled oats|57|27|grain
+steel cut oats|52|28|grain
+quinoa|53|21|grain
+couscous|65|23|grain
+barley|28|28|grain
+buckwheat|49|29|grain
+millet|71|25|grain
+cornmeal|69|74|grain
+tortilla|52|48|bread
+corn tortilla|52|45|bread
+pizza dough|80|54|bread
+pizza|60|30|mixed
+waffles|76|33|mixed
+pancakes|67|34|mixed
+cornflakes|81|84|cereal
+bran flakes|74|67|cereal
+muesli|57|63|cereal
+granola|62|64|cereal
+rice cakes|82|81|snack
+potato|78|17|vegetable
+boiled potato|78|17|vegetable
+baked potato|85|20|vegetable
+mashed potato|83|18|vegetable
+sweet potato|63|20|vegetable
+french fries|75|35|vegetable
+carrot|39|10|vegetable
+cooked carrot|49|8|vegetable
+pumpkin|75|6|vegetable
+corn|52|19|vegetable
+sweet corn|52|19|vegetable
+peas|51|14|vegetable
+parsnip|52|18|vegetable
+beetroot|64|10|vegetable
+broccoli|10|7|vegetable
+spinach|15|3|vegetable
+lettuce|10|2|vegetable
+tomato|15|4|vegetable
+cucumber|15|4|vegetable
+zucchini|15|3|vegetable
+cauliflower|10|5|vegetable
+cabbage|10|6|vegetable
+kale|10|9|vegetable
+celery|10|3|vegetable
+bell pepper|15|6|vegetable
+onion|10|9|vegetable
+garlic|10|33|vegetable
+mushroom|10|3|vegetable
+asparagus|15|4|vegetable
+eggplant|15|6|vegetable
+apple|36|14|fruit
+banana|51|23|fruit
+ripe banana|62|24|fruit
+orange|43|12|fruit
+mango|51|15|fruit
+watermelon|76|8|fruit
+grapes|59|18|fruit
+strawberry|41|8|fruit
+pineapple|59|13|fruit
+peach|42|10|fruit
+pear|38|15|fruit
+plum|39|11|fruit
+cherry|22|16|fruit
+kiwi|53|15|fruit
+grapefruit|25|11|fruit
+dates|42|75|fruit
+figs|61|19|fruit
+avocado|10|9|fruit
+blueberry|53|14|fruit
+raspberry|32|12|fruit
+orange juice|50|10|drink
+apple juice|44|11|drink
+grape juice|52|15|drink
+lentils|32|20|legume
+red lentils|26|20|legume
+chickpeas|28|27|legume
+black beans|30|23|legume
+kidney beans|29|22|legume
+navy beans|38|26|legume
+pinto beans|39|26|legume
+soybeans|18|9|legume
+hummus|6|14|legume
+edamame|18|10|legume
+split peas|25|21|legume
+chicken|0|0|protein
+chicken breast|0|0|protein
+chicken thigh|0|0|protein
+beef|0|0|protein
+ground beef|0|0|protein
+steak|0|0|protein
+pork|0|0|protein
+lamb|0|0|protein
+fish|0|0|protein
+salmon|0|0|protein
+tuna|0|0|protein
+shrimp|0|0|protein
+cod|0|0|protein
+tilapia|0|0|protein
+eggs|0|1|protein
+egg white|0|0|protein
+tofu|15|2|protein
+tempeh|15|9|protein
+milk|39|5|dairy
+skim milk|37|5|dairy
+whole milk|39|5|dairy
+yogurt|41|17|dairy
+greek yogurt|11|4|dairy
+cheese|0|1|dairy
+cheddar cheese|0|1|dairy
+cream cheese|0|4|dairy
+butter|0|0|fat
+ice cream|57|24|dairy
+cottage cheese|0|3|dairy
+chocolate|40|60|sweet
+dark chocolate|23|46|sweet
+milk chocolate|43|59|sweet
+chips|56|53|snack
+potato chips|56|53|snack
+popcorn|65|78|snack
+donut|76|49|sweet
+cake|67|52|sweet
+cookies|55|64|sweet
+candy|78|90|sweet
+honey|58|82|sweet
+sugar|65|100|sweet
+jam|51|70|sweet
+nutella|33|57|sweet
+crackers|67|72|snack
+pretzels|83|80|snack
+muffin|62|42|sweet
+brownie|43|56|sweet
+cheesecake|46|26|sweet
+cola|63|11|drink
+sports drink|78|6|drink
+beer|66|5|drink
+wine|0|3|drink
+coffee|0|0|drink
+tea|0|0|drink
+energy drink|73|11|drink
+smoothie|52|14|drink
+olive oil|0|0|fat
+coconut oil|0|0|fat
+nuts|14|21|snack
+almonds|0|22|snack
+walnuts|15|14|snack
+cashews|22|30|snack
+peanuts|14|16|snack
+peanut butter|14|20|snack
+sunflower seeds|35|20|snack
+burger|65|28|mixed
+hamburger|65|28|mixed
+sushi|55|28|mixed
+burrito|59|35|mixed
+sandwich|61|30|mixed
+salad|15|5|mixed
+caesar salad|15|8|mixed
+soup|38|8|mixed
+stir fry|40|12|mixed
+curry|51|18|mixed
+tacos|58|24|mixed
+fried rice|72|28|mixed
+pad thai|60|26|mixed
+biryani|65|30|mixed
+shawarma|55|25|mixed
+falafel|32|32|mixed
+lasagna|55|28|mixed
+risotto|69|27|mixed
+paella|62|26|mixed
+ramen|68|26|mixed
+pho|60|20|mixed
+dumplings|55|30|mixed
+spring rolls|52|28|mixed
+samosa|55|30|mixed
+dal|32|20|mixed
+lentil soup|38|8|mixed
+green salad|15|5|mixed
+grilled salmon|0|0|protein
+pizza margherita|60|30|mixed

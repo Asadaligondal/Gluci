@@ -46,6 +46,9 @@ chatRouter.post("/", async (req: AuthedRequest, res) => {
       glucoseCurve: out.structured.glucoseCurve ?? null,
       tip: out.structured.tip ?? null,
       food: out.food ?? null,
+      mealGI: out.structured.mealGI ?? null,
+      mealGL: out.structured.mealGL ?? null,
+      confidence: out.structured.confidence ?? null,
     });
   } catch (e) {
     console.error(e);

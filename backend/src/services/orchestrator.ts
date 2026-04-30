@@ -2,7 +2,12 @@ import path from "path";
 import { prisma } from "../db.js";
 import { getConfig } from "../config.js";
 import { canUseFreeCheck, isSubscribed } from "./users.js";
-import { runGluciTurn } from "./llm.js";
+import { extractFoodIngredients, generateFoodReply, runGluciTurn } from "./llm.js";
+import {
+  calculateMealGlucose,
+  estimatePortions,
+  fallbackGlucoseCalculation,
+} from "./glucoseCalculator.js";
 import { lookupBarcode } from "./openFoodFacts.js";
 import { renderShareCard, saveUploadBase64 } from "./shareCard.js";
 import { getConversationForUser } from "./conversationService.js";
@@ -163,26 +168,82 @@ export async function handleChatTurn(params: {
   });
 
   const llmUserText = enriched || "Please analyze the attached image.";
-  let knowledgeContext: Awaited<ReturnType<typeof findRelevantKnowledge>> = [];
+
+  let structured: Awaited<ReturnType<typeof runGluciTurn>>;
+  let foodLabel: string | undefined;
+
+  let extraction: Awaited<ReturnType<typeof extractFoodIngredients>> = { intent: "chat" };
   try {
-    const fd = extractFoodDescription(llmUserText);
-    if (fd) {
-      knowledgeContext = await findRelevantKnowledge(fd, 3);
-    }
+    extraction = await extractFoodIngredients({
+      userText: llmUserText,
+      imageBase64: params.imageBase64,
+      mimeType: params.mimeType,
+    });
   } catch (e) {
-    console.warn("findRelevantKnowledge:", e);
+    console.warn("extractFoodIngredients:", e);
+    extraction = { intent: "chat" };
   }
 
-  const structured = await runGluciTurn({
-    userText: llmUserText,
-    imageBase64: params.imageBase64,
-    mimeType: params.mimeType,
-    history,
-    profileContext: profileToContext(profile),
-    knowledgeContext,
-  });
+  if (
+    extraction.intent === "meal" &&
+    extraction.ingredients.length > 0 &&
+    !params.barcode
+  ) {
+    const meal = extraction;
+    foodLabel = meal.foodName.trim() || summarizeFoodInput(enriched || llmUserText) || undefined;
+    const ingredients = estimatePortions(meal.ingredients);
+    let calculation = fallbackGlucoseCalculation();
+    try {
+      calculation = await calculateMealGlucose(ingredients);
+    } catch (e) {
+      console.warn("calculateMealGlucose:", e);
+      calculation = fallbackGlucoseCalculation();
+    }
 
-  const foodLabel = summarizeFoodInput(enriched || llmUserText) || undefined;
+    let knowledge: Awaited<ReturnType<typeof findRelevantKnowledge>> = [];
+    try {
+      knowledge = await findRelevantKnowledge(meal.foodName, 3);
+    } catch (e) {
+      console.warn("findRelevantKnowledge (meal):", e);
+    }
+
+    const { message, tip } = await generateFoodReply(meal.foodName, calculation, knowledge);
+
+    const verdictCap = calculation.verdict.charAt(0).toUpperCase() + calculation.verdict.slice(1);
+    structured = {
+      userReply: message,
+      glucoseGalScore: calculation.score,
+      verdict: verdictCap,
+      intent: "meal",
+      countAsDecision: true,
+      suggestShareCard: true,
+      glucoseCurve: calculation.curvePoints,
+      tip,
+      mealGI: calculation.mealGI,
+      mealGL: calculation.mealGL,
+      confidence: calculation.confidence,
+    };
+  } else {
+    let knowledgeContext: Awaited<ReturnType<typeof findRelevantKnowledge>> = [];
+    try {
+      const fd = extractFoodDescription(llmUserText);
+      if (fd) {
+        knowledgeContext = await findRelevantKnowledge(fd, 3);
+      }
+    } catch (e) {
+      console.warn("findRelevantKnowledge:", e);
+    }
+
+    structured = await runGluciTurn({
+      userText: llmUserText,
+      imageBase64: params.imageBase64,
+      mimeType: params.mimeType,
+      history,
+      profileContext: profileToContext(profile),
+      knowledgeContext,
+    });
+    foodLabel = summarizeFoodInput(enriched || llmUserText) || undefined;
+  }
 
   let shareCardUrl: string | undefined;
   let shareLandingUrl: string | undefined;
@@ -230,6 +291,9 @@ export async function handleChatTurn(params: {
         glucoseCurve: structured.glucoseCurve ?? null,
         tip: structured.tip ?? null,
         food: foodLabel,
+        ...(structured.mealGI !== undefined ? { mealGI: structured.mealGI } : {}),
+        ...(structured.mealGL !== undefined ? { mealGL: structured.mealGL } : {}),
+        ...(structured.confidence ? { confidence: structured.confidence } : {}),
       }),
     },
   });

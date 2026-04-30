@@ -107,6 +107,20 @@ model UsageEvent {
   createdAt DateTime @default(now())
 }
 
+/** Glycemic index reference foods (seed via seed_gi.py). */
+model GiFood {
+  id             Int     @id @default(autoincrement())
+  name           String
+  name_lower     String  @unique
+  gi_value       Float
+  carbs_per_100g Float?
+  category       String?
+  source         String  @default("auto")
+
+  @@index([name_lower])
+  @@map("gi_food")
+}
+
 /// Seeded Instagram RAG rows; `embedding` uses pgvector (managed via SQL / seed script).
 model InstagramKnowledge {
   id                   Int     @id @default(autoincrement())

@@ -28,6 +28,9 @@ historyRouter.get("/", async (req: AuthedRequest, res) => {
       let tip: string | null = null;
       let glucoseCurve: unknown = null;
       let food: string | null = null;
+      let mealGI: number | null = null;
+      let mealGL: number | null = null;
+      let confidence: string | null = null;
       if (m.metadata) {
         try {
           const meta = JSON.parse(m.metadata) as {
@@ -38,6 +41,9 @@ historyRouter.get("/", async (req: AuthedRequest, res) => {
             tip?: string | null;
             glucoseCurve?: unknown;
             food?: string | null;
+            mealGI?: number | null;
+            mealGL?: number | null;
+            confidence?: string | null;
           };
           if (typeof meta.score === "number") score = meta.score;
           if (typeof meta.verdict === "string") verdict = meta.verdict;
@@ -46,6 +52,9 @@ historyRouter.get("/", async (req: AuthedRequest, res) => {
           if (typeof meta.tip === "string") tip = meta.tip;
           if (Array.isArray(meta.glucoseCurve)) glucoseCurve = meta.glucoseCurve;
           if (typeof meta.food === "string" && meta.food.trim()) food = meta.food;
+          if (typeof meta.mealGI === "number") mealGI = meta.mealGI;
+          if (typeof meta.mealGL === "number") mealGL = meta.mealGL;
+          if (typeof meta.confidence === "string" && meta.confidence.trim()) confidence = meta.confidence;
         } catch {
           /* ignore malformed metadata */
         }
@@ -65,6 +74,9 @@ historyRouter.get("/", async (req: AuthedRequest, res) => {
         tip,
         glucoseCurve,
         food,
+        mealGI,
+        mealGL,
+        confidence,
       };
     }),
   });
