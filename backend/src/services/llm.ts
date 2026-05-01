@@ -92,6 +92,16 @@ CRITICAL PORTION RULES:
   e.g. {name: 'chicken biryani', amount: '250g'}
   NOT decomposed into rice + chicken + spices
 
+- For pizza specifically:
+  One slice of pizza = 80g total (not decomposed)
+  Use the gi_food entry 'pizza' directly (name the ingredient clearly as pizza so it matches)
+  Do NOT decompose into dough + cheese + sauce + toppings
+  Decomposition causes massive carb overcounting
+
+- For ANY dish that exists as a single entry in common food databases (pizza, burger, curry, biryani, sushi):
+  Treat as ONE ingredient with realistic single-serving weight
+  Do not decompose into raw ingredients
+
 - For restaurant meals assume standard portions
 - For homemade meals assume moderate portions`;
 

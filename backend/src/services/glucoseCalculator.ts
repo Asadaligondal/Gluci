@@ -311,7 +311,7 @@ export async function calculateMealGlucose(ingredients: FoodIngredient[]): Promi
   const peakMgDl = Math.min(effectiveGL * 1.5, 100);
   const peakMinute = Math.max(20, Math.min(75, Math.round(15 + mealGI * 0.45)));
 
-  const rawScore = 10 - effectiveGL / 4.0;
+  const rawScore = 10 - effectiveGL / 6.0;
   let score = Math.round(Math.max(1, Math.min(10, rawScore)) * 10) / 10;
 
   // Minimum score floor for meals dominated by vegetables and protein
