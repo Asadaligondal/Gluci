@@ -527,6 +527,7 @@ private fun ChatMessageBubble(
             )
         } else if (!isUser && m.score != null &&
                    m.glucoseCurve.isNullOrEmpty() &&
+                   m.intent != "general" &&
                    m.intent != "non_food_barcode" && m.intent != "unknown_barcode" &&
                    !m.verdict.isNullOrBlank() && !m.verdict.equals("general", ignoreCase = true) &&
                    !m.verdict.equals("subscribe", ignoreCase = true)) {

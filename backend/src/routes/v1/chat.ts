@@ -33,22 +33,25 @@ chatRouter.post("/", async (req: AuthedRequest, res) => {
       barcode: parsed.data.barcode,
       channel: "app",
     });
+    // Only expose food-specific fields for food intents — general chat gets nulls
+    // so the Android client never shows a score card for a chat message.
+    const isFoodIntent = ["meal", "restaurant", "grocery"].includes(out.structured.intent);
     res.json({
       reply: out.reply,
-      score: out.structured.glucoseGalScore,
-      verdict: out.structured.verdict,
+      score: isFoodIntent ? out.structured.glucoseGalScore : null,
+      verdict: isFoodIntent ? out.structured.verdict : null,
       intent: out.structured.intent,
       topOrders: out.structured.topOrders ?? [],
       shareCardUrl: out.shareCardUrl,
       shareLandingUrl: out.shareLandingUrl,
       userImageUrl: out.userImageUrl,
       paywall: out.paywall,
-      glucoseCurve: out.structured.glucoseCurve ?? null,
-      tip: out.structured.tip ?? null,
-      food: out.food ?? null,
-      mealGI: out.structured.mealGI ?? null,
-      mealGL: out.structured.mealGL ?? null,
-      confidence: out.structured.confidence ?? null,
+      glucoseCurve: isFoodIntent ? (out.structured.glucoseCurve ?? null) : null,
+      tip: isFoodIntent ? (out.structured.tip ?? null) : null,
+      food: isFoodIntent ? (out.food ?? null) : null,
+      mealGI: isFoodIntent ? (out.structured.mealGI ?? null) : null,
+      mealGL: isFoodIntent ? (out.structured.mealGL ?? null) : null,
+      confidence: isFoodIntent ? (out.structured.confidence ?? null) : null,
     });
   } catch (e) {
     console.error(e);

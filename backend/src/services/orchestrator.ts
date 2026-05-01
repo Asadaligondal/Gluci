@@ -38,10 +38,30 @@ function extractFoodDescription(text: string): string | null {
 
 function profileToContext(profile: { goal: string | null; dietaryJson: string | null; memoryJson: string | null }) {
   const parts: string[] = [];
-  if (profile.goal) parts.push(`Primary goal: ${profile.goal}`);
-  if (profile.dietaryJson) parts.push(`Dietary JSON: ${profile.dietaryJson}`);
-  if (profile.memoryJson) parts.push(`Memory JSON: ${profile.memoryJson}`);
-  return parts.join("\n") || "(No profile yet—ask onboarding questions if needed.)";
+  if (profile.goal) parts.push(`Goal: ${profile.goal}`);
+
+  if (profile.dietaryJson) {
+    try {
+      const d = JSON.parse(profile.dietaryJson) as Record<string, unknown>;
+      if (d.allergies) parts.push(`Allergies/Avoid: ${d.allergies}`);
+      if (d.preferences) parts.push(`Preferences: ${d.preferences}`);
+    } catch {
+      parts.push(`Dietary info: ${profile.dietaryJson}`);
+    }
+  }
+
+  if (profile.memoryJson) {
+    try {
+      const m = JSON.parse(profile.memoryJson) as { notes?: string[] };
+      if (m.notes && m.notes.length > 0) {
+        parts.push(`Recent food decisions: ${m.notes.slice(-5).join(", ")}`);
+      }
+    } catch {
+      /* ignore malformed memory */
+    }
+  }
+
+  return parts.length > 0 ? parts.join("\n") : "(No profile yet—ask onboarding questions if needed.)";
 }
 
 // ── Barcode helpers ──────────────────────────────────────────────────────────
@@ -182,6 +202,7 @@ export async function handleChatTurn(params: {
     include: { profile: true },
   });
   const profile = user.profile ?? (await prisma.profile.create({ data: { userId: user.id } }));
+  const profileCtx = profileToContext(profile);
   const conv = await getConversationForUser(user.id, params.conversationId);
   if (!conv) throw new Error("Conversation not found");
 
@@ -332,7 +353,7 @@ export async function handleChatTurn(params: {
         console.warn("findRelevantKnowledge (barcode):", e);
       }
 
-      const { message, tip } = await generateFoodReply(barcodeProduct.name, calculation, knowledge);
+      const { message, tip } = await generateFoodReply(barcodeProduct.name, calculation, knowledge, profileCtx);
       const verdictCap = calculation.verdict.charAt(0).toUpperCase() + calculation.verdict.slice(1);
       // Real OFF nutrient data beats our GI lookup → confidence is high
       const confidence = barcodeProduct.nutrients?.carbs != null ? ("high" as const) : calculation.confidence;
@@ -359,6 +380,7 @@ export async function handleChatTurn(params: {
         userText: llmUserText,
         imageBase64: params.imageBase64,
         mimeType: params.mimeType,
+        profileContext: profileCtx,
       });
     } catch (e) {
       console.warn("extractFoodIngredients:", e);
@@ -384,7 +406,7 @@ export async function handleChatTurn(params: {
         console.warn("findRelevantKnowledge (meal):", e);
       }
 
-      const { message, tip } = await generateFoodReply(meal.foodName, calculation, knowledge);
+      const { message, tip } = await generateFoodReply(meal.foodName, calculation, knowledge, profileCtx);
       const verdictCap = calculation.verdict.charAt(0).toUpperCase() + calculation.verdict.slice(1);
       structured = {
         userReply: message,
@@ -415,7 +437,7 @@ export async function handleChatTurn(params: {
         imageBase64: params.imageBase64,
         mimeType: params.mimeType,
         history,
-        profileContext: profileToContext(profile),
+        profileContext: profileCtx,
         knowledgeContext,
       });
       foodLabel = summarizeFoodInput(enriched || llmUserText) || undefined;

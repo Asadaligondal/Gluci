@@ -234,6 +234,7 @@ export async function extractFoodIngredients(params: {
   userText: string;
   imageBase64?: string;
   mimeType?: string;
+  profileContext?: string;
 }): Promise<FoodExtraction> {
   const client = getOpenAIClient();
   const model = params.imageBase64 && params.mimeType ? "gpt-4o" : "gpt-4o-mini";
@@ -247,10 +248,14 @@ export async function extractFoodIngredients(params: {
     });
   }
 
+  const extractionSystem = params.profileContext
+    ? `${EXTRACTION_SYSTEM}\n\nUSER PROFILE:\n${params.profileContext}\n\nConsider this profile when analyzing food. If food contains allergens the user listed, still extract ingredients normally — the allergy warning will be added in the reply.`
+    : EXTRACTION_SYSTEM;
+
   const completion = await client.chat.completions.create({
     model,
     messages: [
-      { role: "system", content: EXTRACTION_SYSTEM },
+      { role: "system", content: extractionSystem },
       { role: "user", content: userContent },
     ],
     response_format: { type: "json_object" },
@@ -275,9 +280,13 @@ export async function generateFoodReply(
   foodName: string,
   calc: GlucoseCalculation,
   knowledgeContext: KnowledgeResult[],
+  profileContext?: string,
 ): Promise<{ message: string; tip: string }> {
   const science = knowledgeContext.map((k) => k.key_tip).filter(Boolean).join("\n");
   const verdictLower = calc.verdict;
+  const profileBlock = profileContext
+    ? `\n\nUSER PROFILE:\n${profileContext}\n\nTailor your reply and tip to this profile. If the user has allergies and this food may contain them, warn explicitly. If the food conflicts with their goal, mention it. If they prefer high protein, suggest protein additions.`
+    : "";
   const system = `You are Gluci, a friendly glucose coach.
 Speak like glucosegoddess — warm, scientific, practical.
 
@@ -288,7 +297,7 @@ Estimated peak: +${calc.peakMgDl} mg/dL at ${calc.peakMinute} minutes
 Meal GI: ${calc.mealGI}, GL: ${calc.mealGL}
 
 Relevant science:
-${science || "(none)"}
+${science || "(none)"}${profileBlock}
 
 Write a JSON response:
 {
