@@ -34,25 +34,66 @@ const EXTRACTION_SYSTEM = `When food is present, output ONLY this JSON:
   "intent": "meal",
   "foodName": "descriptive meal name",
   "ingredients": [
-    { "name": "ingredient name", "amount": "portion size" }
+    { "name": "ingredient name", "amount": "portion in grams only, e.g. 150g" }
   ]
 }
 Be specific with ingredient names.
-List each ingredient separately.
 If no food: { "intent": "chat" }
 Respond ONLY with valid JSON.
 
-IMPORTANT RULES FOR PORTION ESTIMATION:
-- Be CONSERVATIVE with portions — underestimate rather than overestimate
-- A typical restaurant serving of protein = 120-150g
-- A typical side of vegetables = 80-100g
-- A bowl of salad = 150g total ingredients
-- A plate of rice = 150g cooked rice
-- When in doubt, use smaller portions
-- List protein and vegetables as SEPARATE ingredients
-- Do not group everything as one item
-- For salads: list each major component separately
-  e.g. lettuce 80g, tomato 40g, cucumber 30g — NOT "salad bowl 300g"`;
+CRITICAL PORTION RULES:
+- ALWAYS output portions in grams (g) only
+- NEVER use cups, handfuls, pieces, slices etc
+- Convert all measurements to grams yourself
+- Use these reference weights:
+
+  PROTEINS (typical serving):
+  chicken breast = 150g
+  fish fillet = 130g
+  beef steak = 180g
+  eggs = 55g each
+  shrimp = 85g
+
+  GRAINS (typical serving cooked):
+  rice = 150g (1 regular bowl)
+  pasta = 180g (1 plate)
+  bread slice = 30g
+  naan/roti = 80g
+
+  VEGETABLES (typical serving):
+  side salad = 80g
+  main salad = 150g
+  cooked vegetables = 80g
+  raw vegetables = 60g
+
+  DAIRY:
+  milk in coffee = 30g
+  yogurt cup = 150g
+  cheese slice = 20g
+
+  SAUCES/CONDIMENTS:
+  sauce = 30g
+  dressing = 20g
+  oil = 10g
+
+  SNACKS:
+  chips bag = 30g
+  chocolate bar = 45g
+  cookie = 15g
+
+- For photos: estimate based on plate size
+  A standard dinner plate holds 300-400g total food
+  Distribute accordingly between ingredients
+
+- Be CONSERVATIVE — underestimate rather than overestimate portions
+
+- For mixed dishes (curry, stew, biryani):
+  List the dish as ONE ingredient with total weight
+  e.g. {name: 'chicken biryani', amount: '250g'}
+  NOT decomposed into rice + chicken + spices
+
+- For restaurant meals assume standard portions
+- For homemade meals assume moderate portions`;
 
 function buildKnowledgePrompt(knowledgeContext: KnowledgeResult[]): string {
   if (!knowledgeContext.length) return "";

@@ -66,55 +66,86 @@ export async function lookupFoodGI(foodName: string): Promise<{ gi: number; carb
 }
 
 export function estimatePortions(gptIngredients: Array<{ name: string; amount: string }>): FoodIngredient[] {
-  const PORTION_MAP: Record<string, number> = {
-    cup: 180,
-    cups: 180,
-    tbsp: 12,
-    tablespoon: 12,
-    tablespoons: 12,
-    tsp: 4,
-    teaspoon: 4,
-    oz: 25,
-    ounce: 25,
-    ounces: 25,
-    lb: 400,
-    pound: 400,
-    slice: 25,
-    slices: 25,
-    piece: 80,
-    pieces: 80,
-    handful: 25,
-    small: 60,
-    medium: 120,
-    large: 180,
-    plate: 220,
-    bowl: 180,
-    serving: 120,
-    portion: 120,
-  };
-
   return gptIngredients.map((ing) => {
-    const amount = ing.amount.toLowerCase();
-    let grams = 80;
+    const amount = ing.amount.toLowerCase().trim();
+    let grams = 100;
 
-    const numMatch = amount.match(/(\d+\.?\d*)/);
-    const num = numMatch ? parseFloat(numMatch[1]) : 1;
-
-    const gramMatch = amount.match(/(\d+\.?\d*)\s*g\b/);
-    if (gramMatch && !amount.includes("kg")) {
+    const gramMatch = amount.match(/(\d+\.?\d*)\s*g(?:rams?)?(?:\s|$)/);
+    if (gramMatch) {
       grams = parseFloat(gramMatch[1]);
-    } else if (amount.includes("kg")) {
-      grams = num * 1000;
-    } else {
-      for (const [word, gramsPerUnit] of Object.entries(PORTION_MAP)) {
-        if (amount.includes(word)) {
-          grams = num * gramsPerUnit;
-          break;
-        }
+      return {
+        name: ing.name,
+        portionGrams: Math.min(Math.max(grams, 5), 600),
+      };
+    }
+
+    const kgMatch = amount.match(/(\d+\.?\d*)\s*kg/);
+    if (kgMatch) {
+      grams = parseFloat(kgMatch[1]) * 1000;
+      return {
+        name: ing.name,
+        portionGrams: Math.min(Math.max(grams, 5), 600),
+      };
+    }
+
+    const num = parseFloat(amount.match(/(\d+\.?\d*)/)?.[1] || "1");
+
+    const UNIT_MAP: Record<string, number> = {
+      cup: 180,
+      cups: 180,
+      tbsp: 12,
+      tablespoon: 12,
+      tablespoons: 12,
+      tsp: 4,
+      teaspoon: 4,
+      teaspoons: 4,
+      oz: 28,
+      ounce: 28,
+      ounces: 28,
+      lb: 400,
+      pound: 400,
+      slice: 30,
+      slices: 30,
+      piece: 80,
+      pieces: 80,
+      handful: 25,
+      small: 80,
+      medium: 130,
+      large: 200,
+      plate: 300,
+      bowl: 200,
+      serving: 130,
+      portion: 130,
+      scoop: 35,
+      scoops: 35,
+    };
+
+    for (const [unit, gramsPerUnit] of Object.entries(UNIT_MAP)) {
+      if (amount.includes(unit)) {
+        grams = num * gramsPerUnit;
+        break;
       }
     }
 
-    return { name: ing.name, portionGrams: Math.min(grams, 600) };
+    if (/^\d+\.?\d*$/.test(amount) && grams === 100) {
+      grams = parseFloat(amount);
+    }
+
+    if (grams === 100) {
+      const name = ing.name.toLowerCase();
+      if (name.includes("rice") || name.includes("pasta")) grams = 150;
+      else if (name.includes("chicken") || name.includes("fish")) grams = 140;
+      else if (name.includes("bread") || name.includes("roti")) grams = 80;
+      else if (name.includes("salad")) grams = 120;
+      else if (name.includes("soup")) grams = 200;
+      else if (name.includes("egg")) grams = 55;
+      else if (name.includes("sauce") || name.includes("dressing")) grams = 25;
+    }
+
+    return {
+      name: ing.name,
+      portionGrams: Math.min(Math.max(grams, 5), 600),
+    };
   });
 }
 
@@ -178,6 +209,29 @@ export function fallbackGlucoseCalculation(): GlucoseCalculation {
 }
 
 export async function calculateMealGlucose(ingredients: FoodIngredient[]): Promise<GlucoseCalculation> {
+  let totalWeight = ingredients.reduce((s, i) => s + i.portionGrams, 0);
+
+  if (totalWeight > 800) {
+    const scaleFactor = 700 / totalWeight;
+    ingredients.forEach((i) => {
+      i.portionGrams = Math.round(i.portionGrams * scaleFactor);
+    });
+    console.log(
+      `[calc] Scaled down meal from ${totalWeight}g to ~700g (factor: ${scaleFactor.toFixed(2)})`,
+    );
+    totalWeight = ingredients.reduce((s, i) => s + i.portionGrams, 0);
+  }
+
+  if (totalWeight < 50 && totalWeight > 0) {
+    const scaleFactor = 150 / totalWeight;
+    ingredients.forEach((i) => {
+      i.portionGrams = Math.round(i.portionGrams * scaleFactor);
+    });
+    console.log(
+      `[calc] Scaled up meal from ${totalWeight}g to ~150g (factor: ${scaleFactor.toFixed(2)})`,
+    );
+  }
+
   let foundCount = 0;
   for (const ing of ingredients) {
     const lookup = await lookupFoodGI(ing.name);
@@ -189,6 +243,17 @@ export async function calculateMealGlucose(ingredients: FoodIngredient[]): Promi
       applyKeywordFallback(ing);
     }
   }
+
+  console.log(
+    "[portions]",
+    ingredients.map((i) => ({
+      name: i.name,
+      grams: i.portionGrams,
+      gi: i.giValue,
+      carbs: i.carbsPer100g,
+      carbsG: ((i.carbsPer100g ?? 0) / 100) * i.portionGrams,
+    })),
+  );
 
   const confidence: GlucoseCalculation["confidence"] =
     foundCount === ingredients.length
