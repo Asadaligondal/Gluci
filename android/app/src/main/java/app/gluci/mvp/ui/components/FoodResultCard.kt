@@ -3,12 +3,10 @@ package app.gluci.mvp.ui.components
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.defaultMinSize
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -21,8 +19,6 @@ import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -66,121 +62,111 @@ fun FoodResultCard(
     modifier: Modifier = Modifier,
     ragAdjusted: Boolean? = null,
 ) {
-    val outline = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)
-    val shape = RoundedCornerShape(18.dp)
     val (badgeLabel, badgeBg, badgeFg) = verdictTone(verdict)
     val scoreMainColor = scoreColorForVerdict(verdict)
 
-    Surface(
+    Column(
         modifier = modifier.fillMaxWidth(),
-        shape = shape,
-        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f),
-        tonalElevation = 1.dp,
-        shadowElevation = 2.dp,
+        verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        Column(
-            Modifier
-                .border(1.dp, outline, shape)
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+        // Score + verdict badge row
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 4.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            Row(
-                Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 0.dp, vertical = 4.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
+            Row(verticalAlignment = Alignment.Bottom) {
+                Text(
+                    text = String.format("%.1f", score),
+                    fontSize = 36.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = scoreMainColor,
+                )
+                Text(
+                    text = "/10",
+                    fontSize = 18.sp,
+                    color = Color(0xFF888888),
+                    modifier = Modifier.padding(start = 2.dp, bottom = 4.dp),
+                )
+            }
+            Box(
+                modifier = Modifier
+                    .background(badgeBg, RoundedCornerShape(20.dp))
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
             ) {
-                Row(verticalAlignment = Alignment.Bottom) {
-                    Text(
-                        text = String.format("%.1f", score),
-                        fontSize = 36.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = scoreMainColor,
-                    )
-                    Text(
-                        text = "/10",
-                        fontSize = 18.sp,
-                        color = Color(0xFF888888),
-                        modifier = Modifier.padding(start = 2.dp, bottom = 4.dp),
-                    )
-                }
-                Box(
-                    modifier = Modifier
-                        .background(badgeBg, RoundedCornerShape(20.dp))
-                        .padding(horizontal = 16.dp, vertical = 8.dp),
-                ) {
-                    Text(
-                        text = badgeLabel,
-                        color = badgeFg,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 14.sp,
-                        maxLines = 1,
-                    )
-                }
+                Text(
+                    text = badgeLabel,
+                    color = badgeFg,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 14.sp,
+                    maxLines = 1,
+                )
             }
+        }
 
-            if (ragAdjusted == true) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.padding(top = 2.dp),
-                ) {
-                    Icon(
-                        Icons.Default.Science,
-                        contentDescription = null,
-                        modifier = Modifier.size(10.dp),
-                        tint = Color(0xFF9C27B0),
-                    )
-                    Spacer(Modifier.width(3.dp))
-                    Text(
-                        "Science-backed",
-                        fontSize = 9.sp,
-                        color = Color(0xFF9C27B0),
-                    )
-                }
+        if (ragAdjusted == true) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.padding(horizontal = 4.dp),
+            ) {
+                Icon(
+                    Icons.Default.Science,
+                    contentDescription = null,
+                    modifier = Modifier.size(10.dp),
+                    tint = Color(0xFF9C27B0),
+                )
+                Spacer(Modifier.width(3.dp))
+                Text(
+                    "Science-backed",
+                    fontSize = 9.sp,
+                    color = Color(0xFF9C27B0),
+                )
             }
+        }
 
-            GlucoseCurveChart(
-                curvePoints = curvePoints,
-                foodName = foodName,
-                foodImageUrl = foodImageUrl,
-            )
+        GlucoseCurveChart(
+            curvePoints = curvePoints,
+            foodName = foodName,
+            foodImageUrl = foodImageUrl,
+        )
 
-            if (tip.isNotBlank()) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .background(Color(0xFFF8F9FA), RoundedCornerShape(10.dp))
-                        .padding(12.dp),
-                    verticalAlignment = Alignment.Top,
-                ) {
-                    Text(
-                        text = "\uD83D\uDCA1",
-                        fontSize = 16.sp,
-                        modifier = Modifier.padding(end = 8.dp, top = 1.dp),
-                    )
-                    Text(
-                        text = tip,
-                        fontSize = 13.sp,
-                        color = Color(0xFF444444),
-                        lineHeight = 18.sp,
-                    )
-                }
-            }
-
-            Button(
-                onClick = onShare,
+        if (tip.isNotBlank()) {
+            Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(48.dp),
-                enabled = shareCardUrl != null,
-                shape = RoundedCornerShape(24.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1B5E20)),
+                    .background(Color(0xFFFFFBF0), RoundedCornerShape(10.dp))
+                    .border(1.dp, Color(0xFFDDCCAA), RoundedCornerShape(10.dp))
+                    .padding(12.dp),
+                verticalAlignment = Alignment.Top,
             ) {
-                Icon(Icons.Filled.Share, contentDescription = null, modifier = Modifier.size(18.dp))
-                Spacer(Modifier.width(8.dp))
-                Text("Share GlucoseGal card", fontSize = 15.sp, fontWeight = FontWeight.Medium)
+                Text(
+                    text = "💡",
+                    fontSize = 16.sp,
+                    modifier = Modifier.padding(end = 8.dp, top = 1.dp),
+                )
+                Text(
+                    text = tip,
+                    fontSize = 13.sp,
+                    color = Color(0xFF444444),
+                    lineHeight = 18.sp,
+                )
             }
+        }
+
+        Button(
+            onClick = onShare,
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(48.dp),
+            enabled = shareCardUrl != null,
+            shape = RoundedCornerShape(24.dp),
+            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1B5E20)),
+        ) {
+            Icon(Icons.Filled.Share, contentDescription = null, modifier = Modifier.size(18.dp))
+            Spacer(Modifier.width(8.dp))
+            Text("Share GlucoseGal card", fontSize = 15.sp, fontWeight = FontWeight.Medium)
         }
     }
 }
