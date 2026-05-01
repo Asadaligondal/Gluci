@@ -2,6 +2,13 @@ package app.gluci.mvp.screens
 
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.StartOffset
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -218,6 +225,12 @@ fun ChatScreen(
                         },
                     )
                 }
+                val showTypingIndicator = busy && messages.lastOrNull()?.role == "user"
+                if (showTypingIndicator) {
+                    item(key = "gluci-typing") {
+                        TypingIndicatorBubble()
+                    }
+                }
             }
             Column(
                 Modifier
@@ -403,6 +416,63 @@ private fun WelcomeHero(
 }
 
 @Composable
+private fun TypingIndicatorBubble() {
+    val infiniteTransition = rememberInfiniteTransition(label = "typing")
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalAlignment = Alignment.Start,
+    ) {
+        Surface(
+            shape = RoundedCornerShape(
+                topStart = 16.dp,
+                topEnd = 16.dp,
+                bottomEnd = 16.dp,
+                bottomStart = 4.dp,
+            ),
+            color = AiBubble,
+            modifier = Modifier
+                .widthIn(max = 320.dp)
+                .border(
+                    width = 1.dp,
+                    color = Color.White.copy(alpha = 0.6f),
+                    shape = RoundedCornerShape(
+                        topStart = 16.dp,
+                        topEnd = 16.dp,
+                        bottomEnd = 16.dp,
+                        bottomStart = 4.dp,
+                    ),
+                )
+                .shadow(2.dp, RoundedCornerShape(16.dp)),
+        ) {
+            Row(
+                Modifier.padding(horizontal = 22.dp, vertical = 18.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                repeat(3) { index ->
+                    val alpha by infiniteTransition.animateFloat(
+                        initialValue = 0.25f,
+                        targetValue = 1f,
+                        animationSpec = infiniteRepeatable(
+                            animation = tween(durationMillis = 500, easing = LinearEasing),
+                            repeatMode = RepeatMode.Reverse,
+                            initialStartOffset = StartOffset(offsetMillis = index * 160),
+                        ),
+                        label = "dot$index",
+                    )
+                    Box(
+                        Modifier
+                            .size(8.dp)
+                            .clip(CircleShape)
+                            .background(MutedCaption.copy(alpha = alpha)),
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
 private fun ChatMessageBubble(
     m: UiMessage,
     onShareCardClick: (String, String?) -> Unit = { _, _ -> },
@@ -486,13 +556,22 @@ private fun ChatMessageBubble(
                             .clip(RoundedCornerShape(12.dp)),
                     )
                 }
-                if (m.content.isNotBlank()) {
+                if (!isUser) {
+                    Text(
+                        text = m.content.takeIf { it.isNotBlank() }
+                            ?: "Sorry, something went wrong. Please try again.",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        lineHeight = 24.sp,
+                        modifier = Modifier.padding(top = 0.dp),
+                    )
+                } else if (m.content.isNotBlank()) {
                     Text(
                         text = m.content,
                         style = MaterialTheme.typography.bodyLarge,
-                        color = if (isUser) UserBubbleText else MaterialTheme.colorScheme.onSurface,
+                        color = UserBubbleText,
                         lineHeight = 24.sp,
-                        modifier = Modifier.padding(top = if (isUser && !m.imageUrl.isNullOrBlank()) 10.dp else 0.dp),
+                        modifier = Modifier.padding(top = if (!m.imageUrl.isNullOrBlank()) 10.dp else 0.dp),
                     )
                 }
                 if (showInsight) {

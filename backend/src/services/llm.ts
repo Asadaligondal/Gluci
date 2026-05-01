@@ -76,16 +76,24 @@ ${blocks.join("\n---\n")}
 Use this knowledge to make your response more specific and scientifically grounded. Reference these insights naturally without explicitly saying "according to Instagram".`;
 }
 
+/** Fallback used when the model omits usable reply text or returns malformed structured output. */
+export const DEFAULT_GLICI_REPLY =
+  "I'm here to help! Ask me about any food or send a photo to get your glucose score.";
+
 const SYSTEM_CORE = `You are Gluci, a friendly AI food coach (not a doctor). You help users decide what to eat next for stable glucose, energy, and practical swaps—low shame, simple language.
 
 You MUST NOT: diagnose, give medication or insulin advice, claim to treat disease, shame users, or encourage extreme restriction.
 
-Always steer toward one of three actions when relevant:
-1) Check a meal (photo/text): structured verdict/score/glucose curve JSON below.
-2) Restaurant/menu: suggest up to 3 best orders with scores and tweaks (fill topOrders array).
-3) Grocery item: verdict Buy, Modify use, Swap, or Avoid—score, short evaluation, suggest a better swap if needed.
+RESPONSE FORMAT — pick exactly ONE:
 
-If the user is just chatting, intent "general" and countAsDecision false.
+(A) GENERAL / CASUAL CHAT — plain text only (no JSON, no markdown code fences): Use when the user is greeting you, thanking you, making small talk, or asking general questions WITHOUT asking you to analyze specific foods, a restaurant/menu, a grocery item, barcode data, or an attached meal photo. Answer naturally and helpfully in 2–4 short sentences. Personalize using profile context when relevant.
+
+(B) STRUCTURED FOOD GUIDANCE — JSON object only (no prose outside the JSON): Use when they want glucose-aware guidance about meals (including photos), restaurant/menu picks, grocery items, barcoded products, or any specific foods to evaluate.
+
+When using format (B), steer toward these flows when relevant:
+1) Meal (photo/text): verdict/score/glucose curve JSON keys below.
+2) Restaurant/menu: up to 3 best orders with scores and tweaks (fill topOrders array).
+3) Grocery item: verdict Buy, Modify use, Swap, or Avoid—score, short evaluation, suggest a better swap if needed.
 
 When analyzing food (meal intent or photo/text meal questions), ALWAYS return JSON including these keys:
 {
@@ -120,7 +128,7 @@ For restaurant/menu flows include intent "restaurant", topOrders (max 3), countA
 
 For grocery flows include intent "grocery".
 
-Respond ONLY with valid JSON. Merge meal-style keys with legacy aliases allowed:
+Merge meal-style keys with legacy aliases allowed:
 You may include "userReply" instead of "message" OR "glucoseGalScore" instead of "score" for compatibility — prefer message + score when possible.
 
 Legacy restaurant-only shape allowed:
@@ -157,11 +165,26 @@ function parseTopOrders(val: unknown): { name: string; score: number; tweaks: st
 }
 
 export function normalizeGluciResponse(raw: unknown): GluciResponse {
+  if (typeof raw === "string") {
+    const t = raw.trim();
+    return {
+      userReply: t.length >= 2 ? t : DEFAULT_GLICI_REPLY,
+      glucoseGalScore: 5,
+      verdict: "Modify",
+      intent: "general",
+      countAsDecision: false,
+      suggestShareCard: false,
+    };
+  }
+
   const o = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
 
   const message = typeof o.message === "string" ? o.message : undefined;
   const userReply = typeof o.userReply === "string" ? o.userReply : undefined;
-  const combinedMessage = (message ?? userReply ?? "").trim();
+  let combinedMessage = (message ?? userReply ?? "").trim();
+  const tipStr = typeof o.tip === "string" ? o.tip.trim() : "";
+  if (!combinedMessage && tipStr) combinedMessage = tipStr;
+  if (!combinedMessage) combinedMessage = DEFAULT_GLICI_REPLY;
 
   const scoreRaw =
     typeof o.score === "number"
@@ -191,7 +214,7 @@ export function normalizeGluciResponse(raw: unknown): GluciResponse {
     o.confidence === "high" || o.confidence === "medium" || o.confidence === "low" ? o.confidence : undefined;
 
   return {
-    userReply: combinedMessage || userReply || message || "",
+    userReply: combinedMessage,
     glucoseGalScore,
     verdict,
     intent,
@@ -328,6 +351,28 @@ Respond ONLY with valid JSON.`;
   return { message: "Thanks for checking in — this meal should move your glucose in a predictable way.", tip: "Try adding protein or veggies first next time." };
 }
 
+function stripJsonFences(s: string): string {
+  let t = s.trim();
+  if (t.startsWith("```")) {
+    t = t.replace(/^```(?:json)?\s*/i, "").replace(/\s*```\s*$/, "");
+  }
+  return t.trim();
+}
+
+/** Parse structured JSON when present; otherwise treat as plain conversational text. */
+function parseGluciTurnRaw(raw: string): unknown {
+  const trimmed = stripJsonFences(raw);
+  if (!trimmed) return trimmed;
+  if (trimmed.startsWith("{")) {
+    try {
+      return JSON.parse(trimmed) as unknown;
+    } catch {
+      return trimmed;
+    }
+  }
+  return trimmed;
+}
+
 export async function runGluciTurn(params: {
   userText: string;
   imageBase64?: string;
@@ -373,13 +418,13 @@ export async function runGluciTurn(params: {
   const completion = await client.chat.completions.create({
     model: "gpt-4o-mini",
     messages,
-    response_format: { type: "json_object" },
     temperature: 0.7,
     max_tokens: 1600,
   });
 
   const raw = completion.choices[0]?.message?.content;
   if (!raw) throw new Error("Empty LLM response");
-  const parsed = JSON.parse(raw) as unknown;
+  console.log("[llm raw response]", JSON.stringify(raw));
+  const parsed = parseGluciTurnRaw(raw);
   return normalizeGluciResponse(parsed);
 }

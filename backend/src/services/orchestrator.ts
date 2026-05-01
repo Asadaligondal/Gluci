@@ -2,7 +2,12 @@ import path from "path";
 import { prisma } from "../db.js";
 import { getConfig } from "../config.js";
 import { canUseFreeCheck, isSubscribed } from "./users.js";
-import { extractFoodIngredients, generateFoodReply, runGluciTurn } from "./llm.js";
+import {
+  DEFAULT_GLICI_REPLY,
+  extractFoodIngredients,
+  generateFoodReply,
+  runGluciTurn,
+} from "./llm.js";
 import {
   calculateMealGlucose,
   estimatePortions,
@@ -25,6 +30,13 @@ function stripBarcodeAnnotations(text: string): string {
 function summarizeFoodInput(text: string): string {
   const s = stripBarcodeAnnotations(text).trim();
   return s.slice(0, 400);
+}
+
+function safeReply(text: unknown): string {
+  if (text === null || text === undefined) return DEFAULT_GLICI_REPLY;
+  const str = String(text).trim();
+  if (str.length < 2) return DEFAULT_GLICI_REPLY;
+  return str;
 }
 
 /** Text suitable for embedding search — skips greetings and generic vision prompts. */
@@ -241,10 +253,11 @@ export async function handleChatTurn(params: {
       }
     }
     const replyWithLink = checkoutUrl ? `${msg}\n\nUpgrade here: ${checkoutUrl}` : msg;
+    const paywallReply = safeReply(replyWithLink);
     return {
-      reply: replyWithLink,
+      reply: paywallReply,
       structured: {
-        userReply: replyWithLink,
+        userReply: paywallReply,
         glucoseGalScore: 0,
         verdict: "Subscribe",
         intent: "general",
@@ -475,6 +488,7 @@ export async function handleChatTurn(params: {
     });
   }
 
+  structured.userReply = safeReply(structured.userReply);
   const finalReply = structured.userReply;
 
   await prisma.message.create({

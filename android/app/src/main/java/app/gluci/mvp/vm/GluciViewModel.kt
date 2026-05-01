@@ -749,7 +749,7 @@ class GluciViewModel(app: Application) : AndroidViewModel(app) {
         cur.add(
             UiMessage(
                 role = "assistant",
-                content = assistant,
+                content = sanitizeAssistantReply(assistant),
                 score = score,
                 verdict = verdict,
                 intent = intent,
@@ -784,7 +784,7 @@ class GluciViewModel(app: Application) : AndroidViewModel(app) {
         _lastFoodInsight.value = LastFoodInsight(glucoseCurve, score?.toFloat(), verdict, tip)
         _messages.value = _messages.value + UiMessage(
             role = "assistant",
-            content = reply,
+            content = sanitizeAssistantReply(reply),
             score = score,
             verdict = verdict,
             intent = intent,
@@ -798,6 +798,10 @@ class GluciViewModel(app: Application) : AndroidViewModel(app) {
             createdAtMs = now,
         )
     }
+
+    private fun sanitizeAssistantReply(reply: String): String =
+        reply.takeIf { it.isNotBlank() }
+            ?: "Sorry, something went wrong. Please try again."
 
     private fun markLastSendingUserSent(transform: ((UiMessage) -> UiMessage)? = null) {
         val cur = _messages.value.toMutableList()
