@@ -1,5 +1,6 @@
 import { prisma } from "../db.js";
 import { fetchUSDAGuess } from "./usdaLookup.js";
+import type { RAGGlucoseHint } from "./knowledgeBase.js";
 
 export interface FoodIngredient {
   name: string;
@@ -178,11 +179,9 @@ function applyKeywordFallback(ing: FoodIngredient): void {
   }
 }
 
-export function fallbackGlucoseCalculation(): GlucoseCalculation {
-  const peakMgDl = 30;
-  const peakMinute = 45;
+export function generateCurvePoints(peakMgDl: number, peakMinute: number): CurvePoint[] {
   const minutes = [0, 15, 30, 45, 60, 90, 120];
-  const curvePoints: CurvePoint[] = minutes.map((t) => {
+  return minutes.map((t) => {
     let mgDl = 0;
     if (peakMgDl >= 2) {
       if (t <= peakMinute) {
@@ -195,7 +194,11 @@ export function fallbackGlucoseCalculation(): GlucoseCalculation {
     }
     return { minute: t, mg_dl: Math.max(0, Math.round(mgDl * 10) / 10) };
   });
+}
 
+export function fallbackGlucoseCalculation(): GlucoseCalculation {
+  const peakMgDl = 30;
+  const peakMinute = 45;
   return {
     mealGI: 50,
     mealGL: 12,
@@ -203,7 +206,7 @@ export function fallbackGlucoseCalculation(): GlucoseCalculation {
     peakMinute,
     score: 5,
     verdict: "modify",
-    curvePoints,
+    curvePoints: generateCurvePoints(peakMgDl, peakMinute),
     confidence: "low",
   };
 }
@@ -330,20 +333,7 @@ export async function calculateMealGlucose(ingredients: FoodIngredient[]): Promi
   const verdict: GlucoseCalculation["verdict"] =
     score >= 7.0 ? "eat" : score >= 4.5 ? "modify" : "avoid";
 
-  const minutes = [0, 15, 30, 45, 60, 90, 120];
-  const curvePoints: CurvePoint[] = minutes.map((t) => {
-    let mgDl = 0;
-    if (peakMgDl < 2) {
-      mgDl = 0;
-    } else if (t <= peakMinute) {
-      const ratio = t / peakMinute;
-      mgDl = peakMgDl * ratio * ratio;
-    } else {
-      const remaining = (t - peakMinute) / (120 - peakMinute);
-      mgDl = peakMgDl * (1 - remaining) * (1 - remaining * 0.4);
-    }
-    return { minute: t, mg_dl: Math.max(0, Math.round(mgDl * 10) / 10) };
-  });
+  const curvePoints = generateCurvePoints(peakMgDl, peakMinute);
 
   console.log("[glucoseCalc]", {
     mealGI: Math.round(mealGI),
@@ -368,5 +358,82 @@ export async function calculateMealGlucose(ingredients: FoodIngredient[]): Promi
     verdict,
     curvePoints,
     confidence,
+  };
+}
+
+export function applyRAGAdjustment(
+  calculation: GlucoseCalculation,
+  hint: RAGGlucoseHint,
+): GlucoseCalculation {
+  if (!hint.hasHint) return calculation;
+
+  console.log("[rag-adjustment]", {
+    originalScore: calculation.score,
+    ragScore: hint.suggestedScore,
+    ragImpact: hint.suggestedImpact,
+    ragPeak: hint.suggestedPeakMgDl,
+    similarity: hint.confidence,
+    source: hint.source,
+  });
+
+  let adjustedScore = calculation.score;
+  let adjustedPeak = calculation.peakMgDl;
+
+  // Blend formula score with RAG score: similarity 0.80→20% RAG, 0.90→40%, 0.95+→60%
+  if (hint.suggestedScore !== null) {
+    const ragWeight = Math.min((hint.confidence - 0.80) * 6, 0.60);
+    const formulaWeight = 1 - ragWeight;
+    adjustedScore = Math.round(
+      (calculation.score * formulaWeight + hint.suggestedScore * ragWeight) * 10,
+    ) / 10;
+    console.log("[rag-adjustment] score blend:", {
+      formulaScore: calculation.score,
+      ragScore: hint.suggestedScore,
+      ragWeight,
+      adjustedScore,
+    });
+  }
+
+  // Blend peak with RAG spike estimate
+  if (hint.suggestedPeakMgDl !== null) {
+    const ragWeight = Math.min((hint.confidence - 0.80) * 4, 0.40);
+    adjustedPeak = Math.round(
+      calculation.peakMgDl * (1 - ragWeight) + hint.suggestedPeakMgDl * ragWeight,
+    );
+  }
+
+  // Impact-based nudge when no specific score is available
+  if (!hint.suggestedScore && hint.suggestedImpact) {
+    const impactRanges = {
+      low:    { min: 7.0, max: 10.0 },
+      medium: { min: 4.5, max: 7.0 },
+      high:   { min: 1.0, max: 4.5 },
+    };
+    const range = impactRanges[hint.suggestedImpact];
+    if (adjustedScore > range.max) {
+      const gap = adjustedScore - range.max;
+      adjustedScore = Math.round((adjustedScore - gap * 0.2) * 10) / 10;
+    } else if (adjustedScore < range.min) {
+      const gap = range.min - adjustedScore;
+      adjustedScore = Math.round((adjustedScore + gap * 0.2) * 10) / 10;
+    }
+  }
+
+  adjustedScore = Math.max(1, Math.min(10, adjustedScore));
+
+  const adjustedVerdict: GlucoseCalculation["verdict"] =
+    adjustedScore >= 7.0 ? "eat" : adjustedScore >= 4.5 ? "modify" : "avoid";
+
+  const adjustedCurve =
+    Math.abs(adjustedPeak - calculation.peakMgDl) > 5
+      ? generateCurvePoints(adjustedPeak, calculation.peakMinute)
+      : calculation.curvePoints;
+
+  return {
+    ...calculation,
+    score: adjustedScore,
+    verdict: adjustedVerdict,
+    peakMgDl: adjustedPeak,
+    curvePoints: adjustedCurve,
   };
 }

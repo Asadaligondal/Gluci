@@ -72,3 +72,45 @@ export async function findRelevantKnowledge(
     similarity: Number(r.similarity),
   }));
 }
+
+export interface RAGGlucoseHint {
+  hasHint: boolean;
+  suggestedScore: number | null;
+  suggestedImpact: "low" | "medium" | "high" | null;
+  suggestedPeakMgDl: number | null;
+  confidence: number;
+  source: string;
+}
+
+export function extractGlucoseHint(knowledge: KnowledgeResult[]): RAGGlucoseHint {
+  const highConfidence = knowledge.filter((k) => k.similarity > 0.80);
+
+  if (highConfidence.length === 0) {
+    return { hasHint: false, suggestedScore: null, suggestedImpact: null, suggestedPeakMgDl: null, confidence: 0, source: "" };
+  }
+
+  const best = highConfidence[0];
+  const ragScore = best.score;
+  const impact = ["low", "medium", "high"].includes(best.glucose_impact)
+    ? (best.glucose_impact as "low" | "medium" | "high")
+    : null;
+  const ragPeak = best.spike_estimate_mg_dl;
+
+  const impactFromVerdict =
+    best.verdict === "eat" ? "low"
+    : best.verdict === "modify" ? "medium"
+    : best.verdict === "avoid" ? "high"
+    : null;
+
+  const finalImpact = impact ?? impactFromVerdict;
+  const hasHint = !!(ragScore || finalImpact || ragPeak);
+
+  return {
+    hasHint,
+    suggestedScore: ragScore,
+    suggestedImpact: finalImpact,
+    suggestedPeakMgDl: ragPeak,
+    confidence: best.similarity,
+    source: best.account,
+  };
+}

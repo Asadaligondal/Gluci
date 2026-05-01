@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Science
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -63,6 +64,7 @@ fun FoodResultCard(
     shareCardUrl: String?,
     onShare: () -> Unit,
     modifier: Modifier = Modifier,
+    ragAdjusted: Boolean? = null,
 ) {
     val outline = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)
     val shape = RoundedCornerShape(18.dp)
@@ -114,6 +116,26 @@ fun FoodResultCard(
                         fontWeight = FontWeight.Bold,
                         fontSize = 14.sp,
                         maxLines = 1,
+                    )
+                }
+            }
+
+            if (ragAdjusted == true) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.padding(top = 2.dp),
+                ) {
+                    Icon(
+                        Icons.Default.Science,
+                        contentDescription = null,
+                        modifier = Modifier.size(10.dp),
+                        tint = Color(0xFF9C27B0),
+                    )
+                    Spacer(Modifier.width(3.dp))
+                    Text(
+                        "Science-backed",
+                        fontSize = 9.sp,
+                        color = Color(0xFF9C27B0),
                     )
                 }
             }

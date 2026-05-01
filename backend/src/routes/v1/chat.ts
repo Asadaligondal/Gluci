@@ -52,6 +52,8 @@ chatRouter.post("/", async (req: AuthedRequest, res) => {
       mealGI: isFoodIntent ? (out.structured.mealGI ?? null) : null,
       mealGL: isFoodIntent ? (out.structured.mealGL ?? null) : null,
       confidence: isFoodIntent ? (out.structured.confidence ?? null) : null,
+      ragAdjusted: isFoodIntent ? (out.structured.ragAdjusted ?? false) : null,
+      ragSource: isFoodIntent ? (out.structured.ragSource ?? null) : null,
     });
   } catch (e) {
     console.error(e);

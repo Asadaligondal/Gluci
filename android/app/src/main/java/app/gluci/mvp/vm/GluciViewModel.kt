@@ -56,6 +56,7 @@ data class UiMessage(
     val createdAtMs: Long? = null,
     /** Backend hybrid scorer: show gentle "estimated" UX when low. */
     val confidence: String? = null,
+    val ragAdjusted: Boolean? = null,
 )
 
 data class LastFoodInsight(
@@ -548,6 +549,7 @@ class GluciViewModel(app: Application) : AndroidViewModel(app) {
                     food = out.food,
                     mealImageUrl = null,
                     confidence = out.confidence,
+                    ragAdjusted = out.ragAdjusted,
                 )
                 handlePaywall(out.paywall?.checkoutUrl)
                 refreshConversations()
@@ -608,6 +610,7 @@ class GluciViewModel(app: Application) : AndroidViewModel(app) {
                     food = out.food,
                     mealImageUrl = out.userImageUrl,
                     confidence = out.confidence,
+                    ragAdjusted = out.ragAdjusted,
                 )
                 handlePaywall(out.paywall?.checkoutUrl)
                 refreshConversations()
@@ -655,6 +658,7 @@ class GluciViewModel(app: Application) : AndroidViewModel(app) {
                     food = out.food,
                     mealImageUrl = out.userImageUrl, // OFF product image for barcode scans
                     confidence = out.confidence,
+                    ragAdjusted = out.ragAdjusted,
                 )
                 handlePaywall(out.paywall?.checkoutUrl)
                 refreshConversations()
@@ -734,6 +738,7 @@ class GluciViewModel(app: Application) : AndroidViewModel(app) {
         food: String? = null,
         mealImageUrl: String? = null,
         confidence: String? = null,
+        ragAdjusted: Boolean? = null,
     ) {
         val now = System.currentTimeMillis()
         val cur = _messages.value.toMutableList()
@@ -760,6 +765,7 @@ class GluciViewModel(app: Application) : AndroidViewModel(app) {
                 food = food,
                 mealImageUrl = mealImageUrl,
                 confidence = confidence,
+                ragAdjusted = ragAdjusted,
                 createdAtMs = now,
             ),
         )
@@ -779,6 +785,7 @@ class GluciViewModel(app: Application) : AndroidViewModel(app) {
         food: String? = null,
         mealImageUrl: String? = null,
         confidence: String? = null,
+        ragAdjusted: Boolean? = null,
     ) {
         val now = System.currentTimeMillis()
         _lastFoodInsight.value = LastFoodInsight(glucoseCurve, score?.toFloat(), verdict, tip)
@@ -795,6 +802,7 @@ class GluciViewModel(app: Application) : AndroidViewModel(app) {
             food = food,
             mealImageUrl = mealImageUrl,
             confidence = confidence,
+            ragAdjusted = ragAdjusted,
             createdAtMs = now,
         )
     }

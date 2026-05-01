@@ -603,6 +603,7 @@ private fun ChatMessageBubble(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(top = 8.dp),
+                ragAdjusted = m.ragAdjusted,
             )
         } else if (!isUser && m.score != null &&
                    m.glucoseCurve.isNullOrEmpty() &&

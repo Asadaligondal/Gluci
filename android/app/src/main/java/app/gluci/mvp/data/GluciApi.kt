@@ -76,6 +76,8 @@ data class ChatResponse(
     @SerializedName("mealGI") val mealGI: Double? = null,
     @SerializedName("mealGL") val mealGL: Double? = null,
     val confidence: String? = null,
+    val ragAdjusted: Boolean? = null,
+    val ragSource: String? = null,
 )
 
 data class TopOrder(

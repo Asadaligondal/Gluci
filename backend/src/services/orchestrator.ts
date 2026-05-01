@@ -10,6 +10,7 @@ import {
 } from "./llm.js";
 import {
   calculateMealGlucose,
+  applyRAGAdjustment,
   estimatePortions,
   fallbackGlucoseCalculation,
 } from "./glucoseCalculator.js";
@@ -18,7 +19,7 @@ import { renderShareCard, saveUploadBase64 } from "./shareCard.js";
 import { getConversationForUser } from "./conversationService.js";
 import { ensureShareRef } from "./shareRef.js";
 import { logAnalytics } from "./analytics.js";
-import { findRelevantKnowledge } from "./knowledgeBase.js";
+import { findRelevantKnowledge, extractGlucoseHint } from "./knowledgeBase.js";
 
 function stripBarcodeAnnotations(text: string): string {
   return text
@@ -188,7 +189,11 @@ function extractIngredientsFromProduct(product: OffProduct): {
 }
 
 // ── Wider intent type so barcodes can signal non-food / unknown states ────────
-type TurnStructured = Omit<Awaited<ReturnType<typeof runGluciTurn>>, "intent"> & { intent: string };
+type TurnStructured = Omit<Awaited<ReturnType<typeof runGluciTurn>>, "intent"> & {
+  intent: string;
+  ragAdjusted?: boolean;
+  ragSource?: string;
+};
 
 export async function handleChatTurn(params: {
   userId: string;
@@ -366,23 +371,27 @@ export async function handleChatTurn(params: {
         console.warn("findRelevantKnowledge (barcode):", e);
       }
 
-      const { message, tip } = await generateFoodReply(barcodeProduct.name, calculation, knowledge, profileCtx);
-      const verdictCap = calculation.verdict.charAt(0).toUpperCase() + calculation.verdict.slice(1);
+      const ragHint = extractGlucoseHint(knowledge);
+      const finalCalc = applyRAGAdjustment(calculation, ragHint);
+      const { message, tip } = await generateFoodReply(barcodeProduct.name, finalCalc, knowledge, profileCtx);
+      const verdictCap = finalCalc.verdict.charAt(0).toUpperCase() + finalCalc.verdict.slice(1);
       // Real OFF nutrient data beats our GI lookup → confidence is high
-      const confidence = barcodeProduct.nutrients?.carbs != null ? ("high" as const) : calculation.confidence;
+      const confidence = barcodeProduct.nutrients?.carbs != null ? ("high" as const) : finalCalc.confidence;
 
       structured = {
         userReply: message,
-        glucoseGalScore: calculation.score,
+        glucoseGalScore: finalCalc.score,
         verdict: verdictCap,
         intent: "meal",
         countAsDecision: true,
         suggestShareCard: true,
-        glucoseCurve: calculation.curvePoints,
+        glucoseCurve: finalCalc.curvePoints,
         tip,
-        mealGI: calculation.mealGI,
-        mealGL: calculation.mealGL,
+        mealGI: finalCalc.mealGI,
+        mealGL: finalCalc.mealGL,
         confidence,
+        ragAdjusted: ragHint.hasHint,
+        ragSource: ragHint.source || undefined,
       };
     }
   } else {
@@ -419,20 +428,24 @@ export async function handleChatTurn(params: {
         console.warn("findRelevantKnowledge (meal):", e);
       }
 
-      const { message, tip } = await generateFoodReply(meal.foodName, calculation, knowledge, profileCtx);
-      const verdictCap = calculation.verdict.charAt(0).toUpperCase() + calculation.verdict.slice(1);
+      const ragHint = extractGlucoseHint(knowledge);
+      const finalCalc = applyRAGAdjustment(calculation, ragHint);
+      const { message, tip } = await generateFoodReply(meal.foodName, finalCalc, knowledge, profileCtx);
+      const verdictCap = finalCalc.verdict.charAt(0).toUpperCase() + finalCalc.verdict.slice(1);
       structured = {
         userReply: message,
-        glucoseGalScore: calculation.score,
+        glucoseGalScore: finalCalc.score,
         verdict: verdictCap,
         intent: "meal",
         countAsDecision: true,
         suggestShareCard: true,
-        glucoseCurve: calculation.curvePoints,
+        glucoseCurve: finalCalc.curvePoints,
         tip,
-        mealGI: calculation.mealGI,
-        mealGL: calculation.mealGL,
-        confidence: calculation.confidence,
+        mealGI: finalCalc.mealGI,
+        mealGL: finalCalc.mealGL,
+        confidence: finalCalc.confidence,
+        ragAdjusted: ragHint.hasHint,
+        ragSource: ragHint.source || undefined,
       };
     } else {
       let knowledgeContext: Awaited<ReturnType<typeof findRelevantKnowledge>> = [];
