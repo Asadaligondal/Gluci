@@ -67,6 +67,12 @@ export async function lookupFoodGI(foodName: string): Promise<{ gi: number; carb
 }
 
 export function estimatePortions(gptIngredients: Array<{ name: string; amount: string }>): FoodIngredient[] {
+  const GARNISH_KEYWORDS = [
+    "slice", "slices", "wedge", "wedges", "garnish",
+    "drizzle", "sprinkle", "dash", "pinch", "squeeze",
+    "zest", "splash", "touch", "hint",
+  ];
+
   return gptIngredients.map((ing) => {
     const amount = ing.amount.toLowerCase().trim();
     let grams = 100;
@@ -74,73 +80,70 @@ export function estimatePortions(gptIngredients: Array<{ name: string; amount: s
     const gramMatch = amount.match(/(\d+\.?\d*)\s*g(?:rams?)?(?:\s|$)/);
     if (gramMatch) {
       grams = parseFloat(gramMatch[1]);
-      return {
-        name: ing.name,
-        portionGrams: Math.min(Math.max(grams, 5), 600),
-      };
-    }
+    } else {
+      const kgMatch = amount.match(/(\d+\.?\d*)\s*kg/);
+      if (kgMatch) {
+        grams = parseFloat(kgMatch[1]) * 1000;
+      } else {
+        const num = parseFloat(amount.match(/(\d+\.?\d*)/)?.[1] || "1");
 
-    const kgMatch = amount.match(/(\d+\.?\d*)\s*kg/);
-    if (kgMatch) {
-      grams = parseFloat(kgMatch[1]) * 1000;
-      return {
-        name: ing.name,
-        portionGrams: Math.min(Math.max(grams, 5), 600),
-      };
-    }
+        const UNIT_MAP: Record<string, number> = {
+          cup: 180,
+          cups: 180,
+          tbsp: 12,
+          tablespoon: 12,
+          tablespoons: 12,
+          tsp: 4,
+          teaspoon: 4,
+          teaspoons: 4,
+          oz: 28,
+          ounce: 28,
+          ounces: 28,
+          lb: 400,
+          pound: 400,
+          slice: 30,
+          slices: 30,
+          piece: 80,
+          pieces: 80,
+          handful: 25,
+          small: 80,
+          medium: 130,
+          large: 200,
+          plate: 300,
+          bowl: 200,
+          serving: 130,
+          portion: 130,
+          scoop: 35,
+          scoops: 35,
+        };
 
-    const num = parseFloat(amount.match(/(\d+\.?\d*)/)?.[1] || "1");
+        for (const [unit, gramsPerUnit] of Object.entries(UNIT_MAP)) {
+          if (amount.includes(unit)) {
+            grams = num * gramsPerUnit;
+            break;
+          }
+        }
 
-    const UNIT_MAP: Record<string, number> = {
-      cup: 180,
-      cups: 180,
-      tbsp: 12,
-      tablespoon: 12,
-      tablespoons: 12,
-      tsp: 4,
-      teaspoon: 4,
-      teaspoons: 4,
-      oz: 28,
-      ounce: 28,
-      ounces: 28,
-      lb: 400,
-      pound: 400,
-      slice: 30,
-      slices: 30,
-      piece: 80,
-      pieces: 80,
-      handful: 25,
-      small: 80,
-      medium: 130,
-      large: 200,
-      plate: 300,
-      bowl: 200,
-      serving: 130,
-      portion: 130,
-      scoop: 35,
-      scoops: 35,
-    };
+        if (/^\d+\.?\d*$/.test(amount) && grams === 100) {
+          grams = parseFloat(amount);
+        }
 
-    for (const [unit, gramsPerUnit] of Object.entries(UNIT_MAP)) {
-      if (amount.includes(unit)) {
-        grams = num * gramsPerUnit;
-        break;
+        if (grams === 100) {
+          const name = ing.name.toLowerCase();
+          if (name.includes("rice") || name.includes("pasta")) grams = 150;
+          else if (name.includes("chicken") || name.includes("fish")) grams = 140;
+          else if (name.includes("bread") || name.includes("roti")) grams = 80;
+          else if (name.includes("salad")) grams = 120;
+          else if (name.includes("soup")) grams = 200;
+          else if (name.includes("egg")) grams = 55;
+          else if (name.includes("sauce") || name.includes("dressing")) grams = 25;
+        }
       }
     }
 
-    if (/^\d+\.?\d*$/.test(amount) && grams === 100) {
-      grams = parseFloat(amount);
-    }
-
-    if (grams === 100) {
-      const name = ing.name.toLowerCase();
-      if (name.includes("rice") || name.includes("pasta")) grams = 150;
-      else if (name.includes("chicken") || name.includes("fish")) grams = 140;
-      else if (name.includes("bread") || name.includes("roti")) grams = 80;
-      else if (name.includes("salad")) grams = 120;
-      else if (name.includes("soup")) grams = 200;
-      else if (name.includes("egg")) grams = 55;
-      else if (name.includes("sauce") || name.includes("dressing")) grams = 25;
+    // Cap garnish/accent ingredients at 30g regardless of other parsing
+    if (GARNISH_KEYWORDS.some((k) => amount.includes(k))) {
+      grams = Math.min(grams, 30);
     }
 
     return {
@@ -180,7 +183,7 @@ function applyKeywordFallback(ing: FoodIngredient): void {
 }
 
 export function generateCurvePoints(peakMgDl: number, peakMinute: number): CurvePoint[] {
-  const minutes = [0, 15, 30, 45, 60, 90, 120];
+  const minutes = [0, 15, 30, 45, 60, 90, 120, 150, 180];
   return minutes.map((t) => {
     let mgDl = 0;
     if (peakMgDl >= 2) {
@@ -188,7 +191,7 @@ export function generateCurvePoints(peakMgDl: number, peakMinute: number): Curve
         const ratio = t / peakMinute;
         mgDl = peakMgDl * ratio * ratio;
       } else {
-        const remaining = (t - peakMinute) / (120 - peakMinute);
+        const remaining = (t - peakMinute) / (180 - peakMinute);
         mgDl = peakMgDl * (1 - remaining) * (1 - remaining * 0.4);
       }
     }
@@ -312,9 +315,9 @@ export async function calculateMealGlucose(ingredients: FoodIngredient[]): Promi
   const effectiveGL = mealGL * dampening;
 
   const peakMgDl = Math.min(effectiveGL * 1.5, 100);
-  const peakMinute = Math.max(20, Math.min(75, Math.round(15 + mealGI * 0.45)));
+  const peakMinute = Math.max(25, Math.min(90, Math.round(20 + mealGI * 0.40)));
 
-  const rawScore = 10 - effectiveGL / 6.0;
+  const rawScore = 10 - effectiveGL / 7.0;
   let score = Math.round(Math.max(1, Math.min(10, rawScore)) * 10) / 10;
 
   // Minimum score floor for meals dominated by vegetables and protein
@@ -322,13 +325,15 @@ export async function calculateMealGlucose(ingredients: FoodIngredient[]): Promi
   const vegProteinGrams = ingredients
     .filter(i => {
       const n = i.name.toLowerCase();
-      return /vegetable|salad|green|leaf|lettuce|spinach|kale|broccoli|tomato|cucumber|pepper|zucchini/.test(n)
-        || /chicken|fish|turkey|tuna|salmon|shrimp|beef|pork|egg/.test(n);
+      return /vegetable|salad|green|leaf|lettuce|spinach|kale|broccoli|tomato|cucumber|pepper|zucchini|asparagus|mushroom/.test(n)
+        || /chicken|fish|turkey|tuna|salmon|shrimp|beef|pork|egg/.test(n)
+        || (i.giValue !== undefined && i.giValue <= 20);
     })
     .reduce((s, i) => s + i.portionGrams, 0);
   const vegProteinRatio = vegProteinGrams / totalPortionGrams;
-  if (vegProteinRatio > 0.8) score = Math.max(score, 6.5);
-  else if (vegProteinRatio > 0.6) score = Math.max(score, 5.0);
+  if (vegProteinRatio > 0.80) score = Math.max(score, 7.5);
+  else if (vegProteinRatio > 0.65) score = Math.max(score, 6.5);
+  else if (vegProteinRatio > 0.50) score = Math.max(score, 5.5);
 
   const verdict: GlucoseCalculation["verdict"] =
     score >= 7.0 ? "eat" : score >= 4.5 ? "modify" : "avoid";

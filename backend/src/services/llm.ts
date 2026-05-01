@@ -424,6 +424,54 @@ function parseGluciTurnRaw(raw: string): unknown {
   return trimmed;
 }
 
+export async function checkScoreReasonability(
+  foodName: string,
+  ingredients: Array<{ name: string; amount: string }>,
+  formulaScore: number,
+  formulaVerdict: string,
+): Promise<{ shouldAdjust: boolean; adjustedScore: number; adjustedVerdict: string; reason: string }> {
+  const ingredientList = ingredients.map((i) => `${i.name} ${i.amount}`).join(", ");
+  const prompt = `A glucose scoring formula gave this meal:
+Food: ${foodName}
+Ingredients: ${ingredientList}
+Formula score: ${formulaScore}/10
+Formula verdict: ${formulaVerdict}
+
+As a nutrition expert, does this score seem reasonable? Consider:
+- Protein and fat have minimal glucose impact
+- Vegetables are generally low impact
+- Only carbs significantly raise glucose
+- Garnishes and small amounts matter little
+
+If the score seems wrong by more than 1.5 points, suggest a correction. Otherwise keep it.
+
+Respond in JSON only:
+{"reasonable": true, "suggestedScore": ${formulaScore}, "reason": "one sentence"}`;
+
+  try {
+    const client = getOpenAIClient();
+    const response = await client.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: [{ role: "user", content: prompt }],
+      response_format: { type: "json_object" },
+      max_tokens: 150,
+      temperature: 0,
+    });
+    const raw = response.choices[0]?.message?.content ?? "";
+    const parsed = JSON.parse(raw) as { reasonable?: boolean; suggestedScore?: number; reason?: string };
+    const suggested = typeof parsed.suggestedScore === "number" ? parsed.suggestedScore : formulaScore;
+    const shouldAdjust = parsed.reasonable === false && Math.abs(suggested - formulaScore) > 1.5;
+    const adjustedScore = shouldAdjust
+      ? Math.max(1, Math.min(10, Math.round((formulaScore * 0.4 + suggested * 0.6) * 10) / 10))
+      : formulaScore;
+    const adjustedVerdict: "eat" | "modify" | "avoid" =
+      adjustedScore >= 7.0 ? "eat" : adjustedScore >= 4.5 ? "modify" : "avoid";
+    return { shouldAdjust, adjustedScore, adjustedVerdict, reason: parsed.reason ?? "" };
+  } catch {
+    return { shouldAdjust: false, adjustedScore: formulaScore, adjustedVerdict: formulaVerdict as "eat" | "modify" | "avoid", reason: "sanity check failed, using formula" };
+  }
+}
+
 export async function runGluciTurn(params: {
   userText: string;
   imageBase64?: string;

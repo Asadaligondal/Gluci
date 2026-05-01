@@ -10,35 +10,74 @@ export type CurvePoint = { minute: number; mg_dl: number };
 
 const CARD_W = 1080;
 const CARD_H = 1350;
+const PHOTO_H = 540;
+const CHART_Y = 740;
+const CHART_H = 500;
 
 const CURVE_MAX_Y = 80;
 const CURVE_THRESHOLD = 30;
 
-function curveStrokePath(points: CurvePoint[], width: number, plotH: number): string {
+/** Generate inner chart SVG markup (no outer <svg> wrapper) for embedding via <g transform>. */
+function generateShareChartSVG(points: CurvePoint[], peak: number): string {
+  const W = CARD_W;
+  const H = CHART_H;
+  const MAX_Y = CURVE_MAX_Y;
+  const PADDING_LEFT = 80;
+  const PADDING_RIGHT = 20;
+  const PADDING_TOP = 30;
+  const PADDING_BOTTOM = 60;
+
+  const innerW = W - PADDING_LEFT - PADDING_RIGHT;
+  const innerH = H - PADDING_TOP - PADDING_BOTTOM;
+  const chartBottom = PADDING_TOP + innerH;
+
+  const threshY = PADDING_TOP + innerH * (1 - CURVE_THRESHOLD / MAX_Y);
+
+  const color = peak < 20 ? "#2E7D32" : peak < 50 ? "#E65100" : "#C62828";
+
   const pts = points.map((p) => ({
-    x: (p.minute / 120) * width,
-    y: plotH - Math.min(Math.max(p.mg_dl / CURVE_MAX_Y, 0), 1.25) * plotH,
+    x: PADDING_LEFT + (p.minute / 180) * innerW,
+    y: PADDING_TOP + innerH - Math.min((p.mg_dl / MAX_Y) * innerH, innerH),
   }));
-  let d = `M ${pts[0].x} ${pts[0].y}`;
-  for (let i = 1; i < pts.length; i++) {
-    const prev = pts[i - 1];
-    const curr = pts[i];
-    const cp1x = prev.x + (curr.x - prev.x) * 0.5;
-    const cp2x = curr.x - (curr.x - prev.x) * 0.5;
-    d += ` C ${cp1x} ${prev.y} ${cp2x} ${curr.y} ${curr.x} ${curr.y}`;
+
+  let curvePath = "";
+  if (pts.length >= 2) {
+    curvePath = `M ${pts[0].x} ${chartBottom} L ${pts[0].x} ${pts[0].y}`;
+    for (let i = 1; i < pts.length; i++) {
+      const prev = pts[i - 1];
+      const curr = pts[i];
+      const cp1x = prev.x + (curr.x - prev.x) * 0.5;
+      const cp2x = curr.x - (curr.x - prev.x) * 0.5;
+      curvePath += ` C ${cp1x} ${prev.y} ${cp2x} ${curr.y} ${curr.x} ${curr.y}`;
+    }
+    curvePath += ` L ${pts[pts.length - 1].x} ${chartBottom} Z`;
   }
-  return d;
+
+  return `
+    <rect x="${PADDING_LEFT}" y="${threshY}" width="${innerW}" height="${chartBottom - threshY}" fill="#C8E6C9"/>
+    <rect x="${PADDING_LEFT}" y="${PADDING_TOP}" width="${innerW}" height="${threshY - PADDING_TOP}" fill="#FFCDD2"/>
+    <line x1="${PADDING_LEFT}" y1="${threshY}" x2="${W - PADDING_RIGHT}" y2="${threshY}" stroke="#E57373" stroke-width="2" stroke-dasharray="16,8"/>
+    <defs>
+      <clipPath id="chartClip">
+        <rect x="${PADDING_LEFT}" y="${PADDING_TOP}" width="${innerW}" height="${innerH}"/>
+      </clipPath>
+    </defs>
+    ${curvePath ? `<path d="${curvePath}" fill="${color}" fill-opacity="0.92" clip-path="url(#chartClip)"/>` : ""}
+    <text x="${PADDING_LEFT - 10}" y="${PADDING_TOP + 20}" font-family="Arial" font-size="28" fill="#555555" text-anchor="end">+60</text>
+    <text x="${PADDING_LEFT - 10}" y="${threshY}" font-family="Arial" font-size="28" fill="#555555" text-anchor="end" dominant-baseline="middle">+30</text>
+    <text x="${PADDING_LEFT - 10}" y="${chartBottom}" font-family="Arial" font-size="28" fill="#555555" text-anchor="end" dominant-baseline="hanging">base</text>
+    <text x="${PADDING_LEFT}" y="${chartBottom + 44}" font-family="Arial" font-size="28" fill="#555555">eating time</text>
+    <text x="${W - PADDING_RIGHT}" y="${chartBottom + 44}" font-family="Arial" font-size="28" fill="#555555" text-anchor="end">+ 3 hours</text>
+  `;
 }
 
-/** Inner glucose curve SVG for share card (920×280 padded area). */
+/** Exported for any consumers that still need a standalone curve SVG (e.g. tests). */
 export function generateCurveSVG(points: CurvePoint[], width: number, totalHeight: number): string {
   const plotH = Math.max(160, totalHeight - 32);
   const threshold30Y = plotH * (1 - CURVE_THRESHOLD / CURVE_MAX_Y);
   const peak = points.length ? Math.max(...points.map((p) => p.mg_dl)) : 0;
   const color = peak < 20 ? "#2E7D32" : peak < 50 ? "#E65100" : "#C62828";
 
-  const spikeLblY = Math.max(26, threshold30Y - 14);
-  const baselineLblY = plotH - 8;
   const xLblY = plotH + 22;
 
   const zonePink = `<rect x="0" y="0" width="${width}" height="${threshold30Y}" fill="#FFCDD2"/>`;
@@ -47,16 +86,15 @@ export function generateCurveSVG(points: CurvePoint[], width: number, totalHeigh
 
   const yLabels = `
     <text x="8" y="22" font-family="Arial, sans-serif" font-size="22" fill="#555555">+60</text>
-    <text x="8" y="${spikeLblY}" font-family="Arial, sans-serif" font-size="22" fill="#555555">spike +30</text>
-    <text x="8" y="${baselineLblY}" font-family="Arial, sans-serif" font-size="22" fill="#555555">baseline</text>
+    <text x="8" y="${Math.max(26, threshold30Y - 14)}" font-family="Arial, sans-serif" font-size="22" fill="#555555">spike +30</text>
+    <text x="8" y="${plotH - 8}" font-family="Arial, sans-serif" font-size="22" fill="#555555">baseline</text>
     <text x="8" y="${xLblY}" font-family="Arial, sans-serif" font-size="22" fill="#555555">eating time</text>
-    <text x="${width - 8}" y="${xLblY}" font-family="Arial, sans-serif" font-size="22" fill="#555555" text-anchor="end">+ 2 hours</text>`;
+    <text x="${width - 8}" y="${xLblY}" font-family="Arial, sans-serif" font-size="22" fill="#555555" text-anchor="end">+ 3 hours</text>`;
 
   let fillPath = "";
-  let strokePathD = "";
   if (points.length >= 2) {
     const pts = points.map((p) => ({
-      x: (p.minute / 120) * width,
+      x: (p.minute / 180) * width,
       y: plotH - Math.min(Math.max(p.mg_dl / CURVE_MAX_Y, 0), 1.25) * plotH,
     }));
     fillPath = `M ${pts[0].x} ${plotH} L ${pts[0].x} ${pts[0].y}`;
@@ -68,14 +106,11 @@ export function generateCurveSVG(points: CurvePoint[], width: number, totalHeigh
       fillPath += ` C ${cp1x} ${prev.y} ${cp2x} ${curr.y} ${curr.x} ${curr.y}`;
     }
     fillPath += ` L ${pts[pts.length - 1].x} ${plotH} Z`;
-    strokePathD = curveStrokePath(points, width, plotH);
   }
 
-  const curveMarkup =
-    fillPath && strokePathD
-      ? `<path d="${fillPath}" fill="${color}" fill-opacity="0.92"/>
-    <path d="${strokePathD}" fill="none" stroke="${color}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>`
-      : "";
+  const curveMarkup = fillPath
+    ? `<path d="${fillPath}" fill="${color}" fill-opacity="0.92"/>`
+    : "";
 
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${totalHeight}">
     ${zonePink}
@@ -120,14 +155,14 @@ function escapeHtml(s: string): string {
   return escapeXml(s).replace(/\n/g, "<br/>");
 }
 
-/** Max ~2 lines for tip (~42 chars per line). */
-function tipTwoLines(insight: string): string {
+/** Wrap tip text to max 2 lines (~58 chars each). */
+function tipTwoLines(insight: string): { line1: string; line2: string } {
   const words = insight.trim().split(/\s+/).filter(Boolean);
   const lines: string[] = [];
   let cur = "";
   for (const w of words) {
     const next = cur ? `${cur} ${w}` : w;
-    if (next.length > 42 && cur) {
+    if (next.length > 58 && cur) {
       lines.push(cur);
       cur = w;
       if (lines.length >= 2) break;
@@ -136,19 +171,16 @@ function tipTwoLines(insight: string): string {
     }
   }
   if (lines.length < 2 && cur) lines.push(cur);
-  const joined = lines.slice(0, 2).join(" ");
-  const truncated = insight.trim().length > joined.length + 3 ? `${joined.slice(0, 118)}…` : joined;
-  return truncated;
+  return { line1: lines[0] ?? "", line2: lines[1] ?? "" };
 }
 
-/** Instagram portrait 1080×1350 — white/light layers, readable curve & typography. */
+/** Instagram portrait 1080×1350 — food photo top half, full-width chart, large score. */
 export async function renderShareCard(params: {
   score: number;
   verdict: string;
   insight: string;
   subtitle?: string;
   heroImagePath?: string;
-  /** Remote product image URL (e.g. from Open Food Facts). Used when no local heroImagePath. */
   heroImageUrl?: string;
   glucoseCurve?: CurvePoint[];
   foodName?: string;
@@ -161,21 +193,15 @@ export async function renderShareCard(params: {
   const W = CARD_W;
   const H = CARD_H;
 
-  let baseBuf = await sharp({
-    create: { width: W, height: H, channels: 4, background: { r: 255, g: 255, b: 255, alpha: 1 } },
-  })
-    .png({ compressionLevel: 6 })
-    .toBuffer();
-
   const composites: sharp.OverlayOptions[] = [];
 
-  // Resolve hero strip: local file → remote URL → gradient placeholder (for barcode scans)
+  // ── Hero photo (top 540px) ────────────────────────────────────────────────
   let heroStripBuf: Buffer | null = null;
 
   if (params.heroImagePath && fs.existsSync(params.heroImagePath)) {
     heroStripBuf = await sharp(params.heroImagePath)
       .rotate()
-      .resize(W, 480, { fit: "cover", position: "center" })
+      .resize(W, PHOTO_H, { fit: "cover", position: "center" })
       .png()
       .toBuffer();
   } else if (params.heroImageUrl) {
@@ -185,7 +211,7 @@ export async function renderShareCard(params: {
         if (imgRes.ok) {
           const rawBuf = Buffer.from(await imgRes.arrayBuffer());
           heroStripBuf = await sharp(rawBuf)
-            .resize(W, 480, { fit: "cover", position: "center" })
+            .resize(W, PHOTO_H, { fit: "cover", position: "center" })
             .png()
             .toBuffer();
         }
@@ -194,36 +220,36 @@ export async function renderShareCard(params: {
       }
     }
     if (!heroStripBuf) {
-      // Gradient placeholder when product has no image
       const pName = escapeXml((params.foodName ?? "Your meal").slice(0, 40));
-      const placeholderSvg = `<svg width="${W}" height="480" xmlns="http://www.w3.org/2000/svg">
+      const placeholderSvg = `<svg width="${W}" height="${PHOTO_H}" xmlns="http://www.w3.org/2000/svg">
         <defs>
           <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
             <stop offset="0%" stop-color="#E8F5E9"/>
             <stop offset="100%" stop-color="#F3E5F5"/>
           </linearGradient>
         </defs>
-        <rect width="${W}" height="480" fill="url(#bg)"/>
-        <text x="${W / 2}" y="260" font-family="Arial, sans-serif" font-size="44" fill="#777777" text-anchor="middle">${pName}</text>
+        <rect width="${W}" height="${PHOTO_H}" fill="url(#bg)"/>
+        <text x="${W / 2}" y="${PHOTO_H / 2 + 16}" font-family="Arial, sans-serif" font-size="44" fill="#777777" text-anchor="middle">${pName}</text>
       </svg>`;
-      heroStripBuf = await sharp(Buffer.from(placeholderSvg)).resize(W, 480).png().toBuffer();
+      heroStripBuf = await sharp(Buffer.from(placeholderSvg)).resize(W, PHOTO_H).png().toBuffer();
     }
   }
 
   if (heroStripBuf) {
-    const fadeSvg = `<svg width="${W}" height="480" xmlns="http://www.w3.org/2000/svg">
+    // Gradient: transparent at y=380, white at y=PHOTO_H
+    const fadeSvg = `<svg width="${W}" height="${PHOTO_H}" xmlns="http://www.w3.org/2000/svg">
       <defs>
-        <linearGradient id="fade" gradientUnits="userSpaceOnUse" x1="0" y1="380" x2="0" y2="480">
+        <linearGradient id="fade" gradientUnits="userSpaceOnUse" x1="0" y1="380" x2="0" y2="${PHOTO_H}">
           <stop offset="0%" stop-color="#ffffff" stop-opacity="0"/>
           <stop offset="100%" stop-color="#ffffff" stop-opacity="1"/>
         </linearGradient>
       </defs>
-      <rect x="0" y="380" width="${W}" height="100" fill="url(#fade)"/>
+      <rect x="0" y="380" width="${W}" height="${PHOTO_H - 380}" fill="url(#fade)"/>
     </svg>`;
     const fadeBuf = await sharp(Buffer.from(fadeSvg)).png().toBuffer();
 
     const heroLayer = await sharp({
-      create: { width: W, height: 480, channels: 4, background: { r: 255, g: 255, b: 255, alpha: 0 } },
+      create: { width: W, height: PHOTO_H, channels: 4, background: { r: 255, g: 255, b: 255, alpha: 0 } },
     })
       .composite([
         { input: heroStripBuf, left: 0, top: 0 },
@@ -235,62 +261,60 @@ export async function renderShareCard(params: {
     composites.push({ input: heroLayer, left: 0, top: 0 });
   }
 
-  const foodTitle = escapeXml((params.foodName ?? "Your meal").slice(0, 52));
+  // ── Content overlay SVG ───────────────────────────────────────────────────
+  const foodTitle = escapeXml((params.foodName ?? "Your meal").slice(0, 40));
   const scoreNum = escapeXml(params.score.toFixed(1));
   const scoreCol = scoreDisplayColor(params.score);
   const vp = verdictPillLight(params.verdict);
   const badgeVerdict = escapeXml(verdictBadgeLabel(params.verdict));
-  const tipPlain = tipTwoLines(params.insight);
+
+  const peak = params.glucoseCurve?.length
+    ? Math.max(...params.glucoseCurve.map((p) => p.mg_dl))
+    : 0;
+  const chartSVG = generateShareChartSVG(params.glucoseCurve ?? [], peak);
+
+  const { line1, line2 } = tipTwoLines(params.insight);
+  const tipLine1 = escapeXml(line1);
+  const tipLine2 = escapeXml(line2);
   const footer = escapeXml(params.subtitle ?? "gluci.app");
 
-  const upperSvg = `<svg width="${W}" height="${H}" xmlns="http://www.w3.org/2000/svg">
-    <text x="540" y="522" text-anchor="middle" font-family="Arial, sans-serif" font-size="52" font-weight="bold" fill="#E91E63">Gluci</text>
-    <text x="540" y="598" text-anchor="middle" font-family="Arial, sans-serif" font-size="38" fill="#1A1A1A">${foodTitle}</text>
-    <text x="540" y="698" text-anchor="middle" font-family="Arial, sans-serif">
-      <tspan font-size="108" font-weight="bold" fill="${scoreCol}">${scoreNum}</tspan><tspan font-size="52" fill="#888888">/10</tspan>
-    </text>
-    <rect x="420" y="800" width="240" height="72" rx="36" ry="36" fill="${vp.bg}"/>
-    <text x="540" y="848" text-anchor="middle" font-family="Arial, sans-serif" font-size="32" font-weight="bold" fill="${vp.fg}">${badgeVerdict}</text>
-  </svg>`;
+  const contentSVG = `<svg width="${W}" height="${H}" xmlns="http://www.w3.org/2000/svg">
 
-  composites.push({ input: await sharp(Buffer.from(upperSvg)).png().toBuffer(), left: 0, top: 0 });
+  <!-- Gluci logo — top left -->
+  <text x="60" y="590" font-family="Arial" font-weight="bold" font-size="52" fill="#E91E63">Gluci</text>
 
-  const CHART_X = 60;
-  const CHART_Y = 880;
-  const OUT_W = 960;
-  const OUT_H = 320;
-  const PAD = 20;
-  const INNER_W = OUT_W - PAD * 2;
-  const INNER_H = OUT_H - PAD * 2;
+  <!-- Score — top right, large -->
+  <text x="${W - 60}" y="572" font-family="Arial" font-weight="bold" font-size="110" fill="${scoreCol}" text-anchor="end">${scoreNum}</text>
+  <text x="${W - 60}" y="636" font-family="Arial" font-size="44" fill="#888888" text-anchor="end">/10</text>
 
-  const curveInnerBuf = await sharp(Buffer.from(generateCurveSVG(params.glucoseCurve ?? [], INNER_W, INNER_H)))
-    .png()
-    .toBuffer();
+  <!-- Food name -->
+  <text x="60" y="648" font-family="Arial" font-size="34" fill="#333333">${foodTitle}</text>
 
-  const frameSvg = `<svg width="${OUT_W}" height="${OUT_H}" xmlns="http://www.w3.org/2000/svg">
-    <rect x="1" y="1" width="${OUT_W - 2}" height="${OUT_H - 2}" rx="16" ry="16" fill="#FFFFFF" stroke="#EEEEEE" stroke-width="2"/>
-  </svg>`;
-  const chartPlate = await sharp(Buffer.from(frameSvg))
-    .png()
-    .composite([{ input: curveInnerBuf, left: PAD, top: PAD }])
-    .png()
-    .toBuffer();
+  <!-- Verdict badge -->
+  <rect x="60" y="664" width="210" height="58" rx="29" fill="${vp.bg}"/>
+  <text x="165" y="700" font-family="Arial" font-weight="bold" font-size="29" fill="${vp.fg}" text-anchor="middle">${badgeVerdict}</text>
 
-  composites.push({ input: chartPlate, left: CHART_X, top: CHART_Y });
+  <!-- Full-width glucose chart -->
+  <g transform="translate(0, ${CHART_Y})">
+    ${chartSVG}
+  </g>
 
-  const lowerSvg = `<svg width="${W}" height="${H}" xmlns="http://www.w3.org/2000/svg">
-    <foreignObject x="60" y="1240" width="960" height="88">
-      <div xmlns="http://www.w3.org/1999/xhtml" style="font-family:Arial,sans-serif;font-size:28px;line-height:1.35;color:#616161;text-align:center;margin:0;padding:0;">
-        ${escapeHtml(tipPlain)}
-      </div>
-    </foreignObject>
-    <rect x="0" y="1300" width="${W}" height="50" fill="#F5F5F5"/>
-    <text x="540" y="1334" text-anchor="middle" font-family="Arial, sans-serif" font-size="24" fill="#9E9E9E">${footer}</text>
-  </svg>`;
+  <!-- Tip text -->
+  ${tipLine1 ? `<text x="60" y="1262" font-family="Arial" font-size="26" fill="#616161">${tipLine1}</text>` : ""}
+  ${tipLine2 ? `<text x="60" y="1296" font-family="Arial" font-size="26" fill="#616161">${tipLine2}</text>` : ""}
 
-  composites.push({ input: await sharp(Buffer.from(lowerSvg)).png().toBuffer(), left: 0, top: 0 });
+  <!-- Footer bar -->
+  <rect x="0" y="1318" width="${W}" height="32" fill="#F5F5F5"/>
+  <text x="${W / 2}" y="1341" font-family="Arial" font-size="22" fill="#9E9E9E" text-anchor="middle">${footer}</text>
+</svg>`;
 
-  await sharp(baseBuf)
+  const contentBuf = await sharp(Buffer.from(contentSVG)).png().toBuffer();
+  composites.push({ input: contentBuf, left: 0, top: 0 });
+
+  // ── Composite all layers ──────────────────────────────────────────────────
+  await sharp({
+    create: { width: W, height: H, channels: 4, background: { r: 255, g: 255, b: 255, alpha: 1 } },
+  })
     .composite(composites)
     .png({ compressionLevel: 4 })
     .toFile(absolutePath);

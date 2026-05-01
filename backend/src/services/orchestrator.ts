@@ -4,6 +4,7 @@ import { getConfig } from "../config.js";
 import { canUseFreeCheck, isSubscribed } from "./users.js";
 import {
   DEFAULT_GLICI_REPLY,
+  checkScoreReasonability,
   extractFoodIngredients,
   generateFoodReply,
   runGluciTurn,
@@ -429,7 +430,24 @@ export async function handleChatTurn(params: {
       }
 
       const ragHint = extractGlucoseHint(knowledge);
-      const finalCalc = applyRAGAdjustment(calculation, ragHint);
+      let finalCalc = applyRAGAdjustment(calculation, ragHint);
+
+      // LLM sanity check — catches formula outliers like salmon scoring 1.0
+      try {
+        const sanity = await checkScoreReasonability(
+          meal.foodName,
+          meal.ingredients,
+          finalCalc.score,
+          finalCalc.verdict,
+        );
+        if (sanity.shouldAdjust) {
+          console.log("[llm-sanity]", sanity);
+          finalCalc = { ...finalCalc, score: sanity.adjustedScore, verdict: sanity.adjustedVerdict };
+        }
+      } catch (e) {
+        console.warn("checkScoreReasonability:", e);
+      }
+
       const { message, tip } = await generateFoodReply(meal.foodName, finalCalc, knowledge, profileCtx);
       const verdictCap = finalCalc.verdict.charAt(0).toUpperCase() + finalCalc.verdict.slice(1);
       structured = {
