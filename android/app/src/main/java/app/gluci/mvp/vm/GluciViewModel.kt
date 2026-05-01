@@ -653,7 +653,7 @@ class GluciViewModel(app: Application) : AndroidViewModel(app) {
                     glucoseCurve = out.glucoseCurve,
                     tip = out.tip,
                     food = out.food,
-                    mealImageUrl = null,
+                    mealImageUrl = out.userImageUrl, // OFF product image for barcode scans
                     confidence = out.confidence,
                 )
                 handlePaywall(out.paywall?.checkoutUrl)

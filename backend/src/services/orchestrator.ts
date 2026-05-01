@@ -8,7 +8,7 @@ import {
   estimatePortions,
   fallbackGlucoseCalculation,
 } from "./glucoseCalculator.js";
-import { lookupBarcode } from "./openFoodFacts.js";
+import { lookupBarcode, type OffProduct } from "./openFoodFacts.js";
 import { renderShareCard, saveUploadBase64 } from "./shareCard.js";
 import { getConversationForUser } from "./conversationService.js";
 import { ensureShareRef } from "./shareRef.js";
@@ -44,6 +44,120 @@ function profileToContext(profile: { goal: string | null; dietaryJson: string | 
   return parts.join("\n") || "(No profile yet—ask onboarding questions if needed.)";
 }
 
+// ── Barcode helpers ──────────────────────────────────────────────────────────
+
+function isFoodProduct(product: OffProduct): boolean {
+  const searchText = [product.name, product.category, product.categories]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+
+  const NON_FOOD_KEYWORDS = [
+    "shampoo", "conditioner", "soap", "detergent", "cleaning", "bleach",
+    "disinfectant", "sanitizer", "toothpaste", "mouthwash", "deodorant",
+    "perfume", "cologne", "lotion", "cream", "moisturizer", "sunscreen",
+    "makeup", "lipstick", "mascara", "medicine", "medication", "tablet",
+    "capsule", "supplement", "vitamin", "pharmaceutical", "battery",
+    "charger", "cable", "electronic", "toy", "game", "book", "stationery",
+    "pen", "paper", "plastic", "rubber", "metal", "pet food", "dog food",
+    "cat food", "animal",
+  ];
+
+  for (const kw of NON_FOOD_KEYWORDS) {
+    if (searchText.includes(kw)) return false;
+  }
+
+  if (product.nutrients) {
+    const { calories, carbs } = product.nutrients;
+    if ((calories !== null && calories > 0) || carbs !== null) return true;
+  }
+
+  const FOOD_KEYWORDS = [
+    "food", "beverage", "drink", "snack", "meal", "grocery", "edible",
+    "nutrition", "calorie", "protein", "carbohydrate", "fat", "sugar",
+    "cereal", "bread", "meat", "dairy", "fruit", "vegetable", "sauce",
+    "condiment", "spice", "candy", "chocolate", "biscuit", "cookie",
+    "juice", "water", "milk", "cheese", "yogurt", "rice", "pasta",
+    "noodle", "soup", "oil",
+  ];
+
+  for (const kw of FOOD_KEYWORDS) {
+    if (searchText.includes(kw)) return true;
+  }
+
+  if (product.categories && product.categories.length > 0) return true;
+  return true; // OFF product without category = assume food
+}
+
+function estimateGIFromNutrients(
+  nutrients: NonNullable<OffProduct["nutrients"]>,
+  product: OffProduct,
+): number {
+  const carbs = nutrients.carbs ?? 0;
+  const sugars = nutrients.sugars ?? 0;
+  const fiber = nutrients.fiber ?? 0;
+  const protein = nutrients.protein ?? 0;
+  const fat = nutrients.fat ?? 0;
+
+  const sugarRatio = carbs > 0 ? sugars / carbs : 0;
+  const fiberAdj = Math.min(fiber * 2, 20);
+
+  let gi =
+    carbs > 70 ? 70
+    : carbs > 50 ? 60
+    : carbs > 30 ? 50
+    : carbs > 15 ? 40
+    : carbs > 5 ? 25
+    : 10;
+
+  gi += sugarRatio * 20;
+  gi -= fiberAdj;
+  if (protein > 10) gi -= 8;
+  if (fat > 10) gi -= 5;
+
+  const name = (product.name ?? "").toLowerCase();
+  if (name.includes("diet") || name.includes("zero") || name.includes("light")) gi -= 10;
+  if (name.includes("whole grain") || name.includes("wholemeal")) gi -= 8;
+
+  return Math.max(5, Math.min(90, Math.round(gi)));
+}
+
+function extractIngredientsFromProduct(product: OffProduct): {
+  name: string;
+  portionGrams: number;
+  giValue?: number;
+  carbsPer100g?: number;
+}[] {
+  const servingSize = product.servingSize ?? 100;
+
+  if (product.nutrients?.carbs != null) {
+    return [
+      {
+        name: product.name,
+        portionGrams: servingSize,
+        carbsPer100g: product.nutrients.carbs,
+        giValue: estimateGIFromNutrients(product.nutrients, product),
+      },
+    ];
+  }
+
+  const ingredients: { name: string; portionGrams: number; giValue?: number; carbsPer100g?: number }[] = [
+    { name: product.name, portionGrams: servingSize },
+  ];
+
+  if (product.ingredients_text) {
+    const mainIngredient = product.ingredients_text.split(",")[0].trim().toLowerCase();
+    if (mainIngredient && mainIngredient !== product.name.toLowerCase()) {
+      ingredients.push({ name: mainIngredient, portionGrams: Math.round(servingSize * 0.6) });
+    }
+  }
+
+  return ingredients;
+}
+
+// ── Wider intent type so barcodes can signal non-food / unknown states ────────
+type TurnStructured = Omit<Awaited<ReturnType<typeof runGluciTurn>>, "intent"> & { intent: string };
+
 export async function handleChatTurn(params: {
   userId: string;
   /** Required for app channel; set automatically for Telegram / WhatsApp */
@@ -55,7 +169,7 @@ export async function handleChatTurn(params: {
   channel: "app" | "telegram" | "whatsapp";
 }): Promise<{
   reply: string;
-  structured: Awaited<ReturnType<typeof runGluciTurn>>;
+  structured: TurnStructured;
   shareCardUrl?: string;
   shareLandingUrl?: string;
   userImageUrl?: string;
@@ -125,12 +239,14 @@ export async function handleChatTurn(params: {
   }
 
   let enriched = params.text?.trim() ?? "";
+  let barcodeProduct: OffProduct | null | undefined; // undefined = no barcode, null = not found
   if (params.barcode) {
     const off = await lookupBarcode(params.barcode);
+    barcodeProduct = off;
     if (off) {
-      enriched += `\n\n[Product data from barcode ${params.barcode}: ${off.name}${off.brands ? ` (${off.brands})` : ""}]`;
+      enriched += `\n\n[Product data from barcode ${params.barcode}: ${off.name}${off.brand ? ` (${off.brand})` : ""}]`;
     } else {
-      enriched += `\n\n[Barcode ${params.barcode}: no Open Food Facts match—use general guidance.]`;
+      enriched += `\n\n[Barcode ${params.barcode}: product not found in Open Food Facts]`;
     }
   }
   if (!enriched && !params.imageBase64) enriched = "Hi! What are you eating next? Send a photo, restaurant name, menu question, or grocery item.";
@@ -169,80 +285,141 @@ export async function handleChatTurn(params: {
 
   const llmUserText = enriched || "Please analyze the attached image.";
 
-  let structured: Awaited<ReturnType<typeof runGluciTurn>>;
+  let structured: TurnStructured;
   let foodLabel: string | undefined;
+  let productImageUrl: string | undefined;
 
-  let extraction: Awaited<ReturnType<typeof extractFoodIngredients>> = { intent: "chat" };
-  try {
-    extraction = await extractFoodIngredients({
-      userText: llmUserText,
-      imageBase64: params.imageBase64,
-      mimeType: params.mimeType,
-    });
-  } catch (e) {
-    console.warn("extractFoodIngredients:", e);
-    extraction = { intent: "chat" };
-  }
-
-  if (
-    extraction.intent === "meal" &&
-    extraction.ingredients.length > 0 &&
-    !params.barcode
-  ) {
-    const meal = extraction;
-    foodLabel = meal.foodName.trim() || summarizeFoodInput(enriched || llmUserText) || undefined;
-    const ingredients = estimatePortions(meal.ingredients);
-    let calculation = fallbackGlucoseCalculation();
-    try {
-      calculation = await calculateMealGlucose(ingredients);
-    } catch (e) {
-      console.warn("calculateMealGlucose:", e);
-      calculation = fallbackGlucoseCalculation();
-    }
-
-    let knowledge: Awaited<ReturnType<typeof findRelevantKnowledge>> = [];
-    try {
-      knowledge = await findRelevantKnowledge(meal.foodName, 3);
-    } catch (e) {
-      console.warn("findRelevantKnowledge (meal):", e);
-    }
-
-    const { message, tip } = await generateFoodReply(meal.foodName, calculation, knowledge);
-
-    const verdictCap = calculation.verdict.charAt(0).toUpperCase() + calculation.verdict.slice(1);
-    structured = {
-      userReply: message,
-      glucoseGalScore: calculation.score,
-      verdict: verdictCap,
-      intent: "meal",
-      countAsDecision: true,
-      suggestShareCard: true,
-      glucoseCurve: calculation.curvePoints,
-      tip,
-      mealGI: calculation.mealGI,
-      mealGL: calculation.mealGL,
-      confidence: calculation.confidence,
-    };
-  } else {
-    let knowledgeContext: Awaited<ReturnType<typeof findRelevantKnowledge>> = [];
-    try {
-      const fd = extractFoodDescription(llmUserText);
-      if (fd) {
-        knowledgeContext = await findRelevantKnowledge(fd, 3);
+  if (params.barcode) {
+    // ── Barcode path ─────────────────────────────────────────────────────────
+    if (!barcodeProduct) {
+      // Not found in Open Food Facts
+      structured = {
+        userReply:
+          "I couldn't find this product in our database. It might be a local or unlisted product. Try taking a photo of the food instead!",
+        glucoseGalScore: 0,
+        verdict: "General",
+        intent: "unknown_barcode",
+        countAsDecision: false,
+        suggestShareCard: false,
+      };
+    } else if (!isFoodProduct(barcodeProduct)) {
+      // Non-food product
+      foodLabel = barcodeProduct.name;
+      structured = {
+        userReply: `"${barcodeProduct.name}" doesn't appear to be a food or drink product. I can only analyze foods and beverages for glucose impact. Try scanning a food item instead!`,
+        glucoseGalScore: 0,
+        verdict: "General",
+        intent: "non_food_barcode",
+        countAsDecision: false,
+        suggestShareCard: false,
+      };
+    } else {
+      // Food product — route through hybrid pipeline (same as photo path)
+      foodLabel = barcodeProduct.name;
+      productImageUrl = barcodeProduct.imageUrl ?? undefined;
+      const ingredients = extractIngredientsFromProduct(barcodeProduct);
+      let calculation = fallbackGlucoseCalculation();
+      try {
+        calculation = await calculateMealGlucose(ingredients);
+      } catch (e) {
+        console.warn("calculateMealGlucose (barcode):", e);
       }
+
+      let knowledge: Awaited<ReturnType<typeof findRelevantKnowledge>> = [];
+      try {
+        knowledge = await findRelevantKnowledge(barcodeProduct.name, 3);
+      } catch (e) {
+        console.warn("findRelevantKnowledge (barcode):", e);
+      }
+
+      const { message, tip } = await generateFoodReply(barcodeProduct.name, calculation, knowledge);
+      const verdictCap = calculation.verdict.charAt(0).toUpperCase() + calculation.verdict.slice(1);
+      // Real OFF nutrient data beats our GI lookup → confidence is high
+      const confidence = barcodeProduct.nutrients?.carbs != null ? ("high" as const) : calculation.confidence;
+
+      structured = {
+        userReply: message,
+        glucoseGalScore: calculation.score,
+        verdict: verdictCap,
+        intent: "meal",
+        countAsDecision: true,
+        suggestShareCard: true,
+        glucoseCurve: calculation.curvePoints,
+        tip,
+        mealGI: calculation.mealGI,
+        mealGL: calculation.mealGL,
+        confidence,
+      };
+    }
+  } else {
+    // ── Normal photo / text path (unchanged) ─────────────────────────────────
+    let extraction: Awaited<ReturnType<typeof extractFoodIngredients>> = { intent: "chat" };
+    try {
+      extraction = await extractFoodIngredients({
+        userText: llmUserText,
+        imageBase64: params.imageBase64,
+        mimeType: params.mimeType,
+      });
     } catch (e) {
-      console.warn("findRelevantKnowledge:", e);
+      console.warn("extractFoodIngredients:", e);
+      extraction = { intent: "chat" };
     }
 
-    structured = await runGluciTurn({
-      userText: llmUserText,
-      imageBase64: params.imageBase64,
-      mimeType: params.mimeType,
-      history,
-      profileContext: profileToContext(profile),
-      knowledgeContext,
-    });
-    foodLabel = summarizeFoodInput(enriched || llmUserText) || undefined;
+    if (extraction.intent === "meal" && extraction.ingredients.length > 0) {
+      const meal = extraction;
+      foodLabel = meal.foodName.trim() || summarizeFoodInput(enriched || llmUserText) || undefined;
+      const ingredients = estimatePortions(meal.ingredients);
+      let calculation = fallbackGlucoseCalculation();
+      try {
+        calculation = await calculateMealGlucose(ingredients);
+      } catch (e) {
+        console.warn("calculateMealGlucose:", e);
+        calculation = fallbackGlucoseCalculation();
+      }
+
+      let knowledge: Awaited<ReturnType<typeof findRelevantKnowledge>> = [];
+      try {
+        knowledge = await findRelevantKnowledge(meal.foodName, 3);
+      } catch (e) {
+        console.warn("findRelevantKnowledge (meal):", e);
+      }
+
+      const { message, tip } = await generateFoodReply(meal.foodName, calculation, knowledge);
+      const verdictCap = calculation.verdict.charAt(0).toUpperCase() + calculation.verdict.slice(1);
+      structured = {
+        userReply: message,
+        glucoseGalScore: calculation.score,
+        verdict: verdictCap,
+        intent: "meal",
+        countAsDecision: true,
+        suggestShareCard: true,
+        glucoseCurve: calculation.curvePoints,
+        tip,
+        mealGI: calculation.mealGI,
+        mealGL: calculation.mealGL,
+        confidence: calculation.confidence,
+      };
+    } else {
+      let knowledgeContext: Awaited<ReturnType<typeof findRelevantKnowledge>> = [];
+      try {
+        const fd = extractFoodDescription(llmUserText);
+        if (fd) {
+          knowledgeContext = await findRelevantKnowledge(fd, 3);
+        }
+      } catch (e) {
+        console.warn("findRelevantKnowledge:", e);
+      }
+
+      structured = await runGluciTurn({
+        userText: llmUserText,
+        imageBase64: params.imageBase64,
+        mimeType: params.mimeType,
+        history,
+        profileContext: profileToContext(profile),
+        knowledgeContext,
+      });
+      foodLabel = summarizeFoodInput(enriched || llmUserText) || undefined;
+    }
   }
 
   let shareCardUrl: string | undefined;
@@ -263,6 +440,7 @@ export async function handleChatTurn(params: {
       insight: structured.userReply.slice(0, 400),
       subtitle: `Join Gluci: ${shareLandingUrl}`,
       heroImagePath: heroAbs,
+      heroImageUrl: !heroAbs ? productImageUrl : undefined,
       glucoseCurve: structured.glucoseCurve,
       foodName: foodLabel,
     });
@@ -343,7 +521,11 @@ export async function handleChatTurn(params: {
     structured,
     shareCardUrl,
     shareLandingUrl,
-    userImageUrl: userImageFilename ? `${base}/static/uploads/${userImageFilename}` : undefined,
+    // For barcode food scans: return OFF product image as userImageUrl so Android
+    // can display it in FoodResultCard via mealImageUrl
+    userImageUrl: userImageFilename
+      ? `${base}/static/uploads/${userImageFilename}`
+      : productImageUrl,
     food: foodLabel,
   };
 }

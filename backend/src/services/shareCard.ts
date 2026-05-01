@@ -148,6 +148,8 @@ export async function renderShareCard(params: {
   insight: string;
   subtitle?: string;
   heroImagePath?: string;
+  /** Remote product image URL (e.g. from Open Food Facts). Used when no local heroImagePath. */
+  heroImageUrl?: string;
   glucoseCurve?: CurvePoint[];
   foodName?: string;
 }): Promise<{ relativeUrl: string; absolutePath: string }> {
@@ -159,8 +161,6 @@ export async function renderShareCard(params: {
   const W = CARD_W;
   const H = CARD_H;
 
-  const hasHero = Boolean(params.heroImagePath && fs.existsSync(params.heroImagePath!));
-
   let baseBuf = await sharp({
     create: { width: W, height: H, channels: 4, background: { r: 255, g: 255, b: 255, alpha: 1 } },
   })
@@ -169,13 +169,48 @@ export async function renderShareCard(params: {
 
   const composites: sharp.OverlayOptions[] = [];
 
-  if (hasHero) {
-    const heroStrip = await sharp(params.heroImagePath!)
+  // Resolve hero strip: local file → remote URL → gradient placeholder (for barcode scans)
+  let heroStripBuf: Buffer | null = null;
+
+  if (params.heroImagePath && fs.existsSync(params.heroImagePath)) {
+    heroStripBuf = await sharp(params.heroImagePath)
       .rotate()
       .resize(W, 480, { fit: "cover", position: "center" })
       .png()
       .toBuffer();
+  } else if (params.heroImageUrl) {
+    if (params.heroImageUrl.startsWith("http")) {
+      try {
+        const imgRes = await fetch(params.heroImageUrl);
+        if (imgRes.ok) {
+          const rawBuf = Buffer.from(await imgRes.arrayBuffer());
+          heroStripBuf = await sharp(rawBuf)
+            .resize(W, 480, { fit: "cover", position: "center" })
+            .png()
+            .toBuffer();
+        }
+      } catch {
+        /* fall through to placeholder */
+      }
+    }
+    if (!heroStripBuf) {
+      // Gradient placeholder when product has no image
+      const pName = escapeXml((params.foodName ?? "Your meal").slice(0, 40));
+      const placeholderSvg = `<svg width="${W}" height="480" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0%" stop-color="#E8F5E9"/>
+            <stop offset="100%" stop-color="#F3E5F5"/>
+          </linearGradient>
+        </defs>
+        <rect width="${W}" height="480" fill="url(#bg)"/>
+        <text x="${W / 2}" y="260" font-family="Arial, sans-serif" font-size="44" fill="#777777" text-anchor="middle">${pName}</text>
+      </svg>`;
+      heroStripBuf = await sharp(Buffer.from(placeholderSvg)).resize(W, 480).png().toBuffer();
+    }
+  }
 
+  if (heroStripBuf) {
     const fadeSvg = `<svg width="${W}" height="480" xmlns="http://www.w3.org/2000/svg">
       <defs>
         <linearGradient id="fade" gradientUnits="userSpaceOnUse" x1="0" y1="380" x2="0" y2="480">
@@ -191,7 +226,7 @@ export async function renderShareCard(params: {
       create: { width: W, height: 480, channels: 4, background: { r: 255, g: 255, b: 255, alpha: 0 } },
     })
       .composite([
-        { input: heroStrip, left: 0, top: 0 },
+        { input: heroStripBuf, left: 0, top: 0 },
         { input: fadeBuf, left: 0, top: 0 },
       ])
       .png()

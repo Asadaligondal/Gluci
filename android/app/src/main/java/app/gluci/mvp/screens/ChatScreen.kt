@@ -507,14 +507,13 @@ private fun ChatMessageBubble(
             }
         }
         if (hasFoodCurve) {
-            val curve = m.glucoseCurve!!
             FoodResultCard(
                 score = (m.score ?: 0.0).toFloat(),
                 verdict = m.verdict ?: "",
                 tip = m.tip.orEmpty(),
                 foodName = m.food?.takeIf { !it.isNullOrBlank() } ?: fallbackFoodTitle(m.content),
                 foodImageUrl = m.mealImageUrl,
-                curvePoints = curve,
+                curvePoints = m.glucoseCurve!!,
                 shareCardUrl = m.shareCardUrl,
                 onShare = {
                     val url = m.shareCardUrl ?: return@FoodResultCard
@@ -522,6 +521,20 @@ private fun ChatMessageBubble(
                         "My glucose score for this meal: ${String.format("%.1f", m.score ?: 0.0)}/10 via @gluciapp #glucosegoddess #bloodsugar"
                     shareGluciCard(url, caption, m.shareLandingUrl)
                 },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 8.dp),
+            )
+        } else if (!isUser && m.score != null &&
+                   m.glucoseCurve.isNullOrEmpty() &&
+                   m.intent != "non_food_barcode" && m.intent != "unknown_barcode" &&
+                   !m.verdict.isNullOrBlank() && !m.verdict.equals("general", ignoreCase = true) &&
+                   !m.verdict.equals("subscribe", ignoreCase = true)) {
+            // Safety net: score exists but no curve (e.g. partial data)
+            SimpleScoreCard(
+                score = m.score.toFloat(),
+                verdict = m.verdict,
+                tip = m.tip.orEmpty(),
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(top = 8.dp),
@@ -743,6 +756,79 @@ private fun ChatInputBar(
                         Icons.Filled.ArrowUpward,
                         contentDescription = "Send",
                         tint = Color.White,
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SimpleScoreCard(
+    score: Float,
+    verdict: String,
+    tip: String,
+    modifier: Modifier = Modifier,
+) {
+    Surface(
+        modifier = modifier.fillMaxWidth(),
+        color = Color.White,
+        shadowElevation = 2.dp,
+        shape = RoundedCornerShape(12.dp),
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = "${String.format("%.1f", score)}/10",
+                    fontSize = 28.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = when {
+                        score >= 7f -> Color(0xFF2E7D32)
+                        score >= 4.5f -> Color(0xFFE65100)
+                        else -> Color(0xFFC62828)
+                    },
+                )
+                Box(
+                    modifier = Modifier
+                        .background(
+                            when (verdict.lowercase()) {
+                                "eat" -> Color(0xFFE8F5E9)
+                                "avoid" -> Color(0xFFFFEBEE)
+                                else -> Color(0xFFFFF3E0)
+                            },
+                            RoundedCornerShape(20.dp),
+                        )
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                ) {
+                    Text(
+                        text = verdict.uppercase(),
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = when (verdict.lowercase()) {
+                            "eat" -> Color(0xFF2E7D32)
+                            "avoid" -> Color(0xFFC62828)
+                            else -> Color(0xFFE65100)
+                        },
+                    )
+                }
+            }
+            if (tip.isNotBlank()) {
+                Spacer(Modifier.height(12.dp))
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(Color(0xFFF8F9FA), RoundedCornerShape(8.dp))
+                        .padding(10.dp),
+                ) {
+                    Text(text = "💡 ", fontSize = 14.sp)
+                    Text(
+                        text = tip,
+                        fontSize = 13.sp,
+                        color = Color(0xFF444444),
                     )
                 }
             }
