@@ -428,8 +428,13 @@ export async function checkScoreReasonability(
   foodName: string,
   ingredients: Array<{ name: string; amount: string }>,
   formulaScore: number,
-  formulaVerdict: string,
-): Promise<{ shouldAdjust: boolean; adjustedScore: number; adjustedVerdict: string; reason: string }> {
+  formulaVerdict: GlucoseCalculation["verdict"],
+): Promise<{
+  shouldAdjust: boolean;
+  adjustedScore: number;
+  adjustedVerdict: GlucoseCalculation["verdict"];
+  reason: string;
+}> {
   const ingredientList = ingredients.map((i) => `${i.name} ${i.amount}`).join(", ");
   const prompt = `A glucose scoring formula gave this meal:
 Food: ${foodName}
@@ -468,7 +473,7 @@ Respond in JSON only:
       adjustedScore >= 7.0 ? "eat" : adjustedScore >= 4.5 ? "modify" : "avoid";
     return { shouldAdjust, adjustedScore, adjustedVerdict, reason: parsed.reason ?? "" };
   } catch {
-    return { shouldAdjust: false, adjustedScore: formulaScore, adjustedVerdict: formulaVerdict as "eat" | "modify" | "avoid", reason: "sanity check failed, using formula" };
+    return { shouldAdjust: false, adjustedScore: formulaScore, adjustedVerdict: formulaVerdict, reason: "sanity check failed, using formula" };
   }
 }
 
