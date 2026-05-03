@@ -106,11 +106,10 @@ function generateShareChartSVG(
 
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${SVG_W}" height="${SVG_H}">
   <rect width="${SVG_W}" height="${SVG_H}" fill="#FAF8F5" rx="16"/>
-  <rect width="${SVG_W}" height="${SVG_H}" fill="none" stroke="#111111" stroke-width="2" rx="16"/>
 
   <!-- Food title with pink underline -->
-  <text x="${PAD_LEFT}" y="46" font-family="Georgia, 'Times New Roman', serif" font-size="30" font-weight="bold" fill="#111111">${titleText}</text>
-  <rect x="${PAD_LEFT}" y="54" width="56" height="3" fill="#E91E8C" rx="1.5"/>
+  <text x="${PAD_LEFT}" y="46" font-family="Georgia, 'Times New Roman', serif" font-size="34" font-weight="bold" fill="#111111">${titleText}</text>
+  <rect x="${PAD_LEFT}" y="56" width="64" height="4" fill="#E91E8C" rx="2"/>
 
   <defs>
     <clipPath id="chartClip">
@@ -121,6 +120,10 @@ function generateShareChartSVG(
   <!-- Zones -->
   <rect x="${PAD_LEFT}" y="${threshY.toFixed(1)}" width="${innerW}" height="${(chartBottom - threshY).toFixed(1)}" fill="#D8EFDA" clip-path="url(#chartClip)"/>
   <rect x="${PAD_LEFT}" y="${PAD_TOP}" width="${innerW}" height="${(threshY - PAD_TOP).toFixed(1)}" fill="#FFD6E0" clip-path="url(#chartClip)"/>
+
+  <!-- Zone boundary border (solid + dotted overlay) -->
+  <line x1="${PAD_LEFT}" y1="${threshY.toFixed(1)}" x2="${PAD_LEFT + innerW}" y2="${threshY.toFixed(1)}" stroke="#333333" stroke-opacity="0.5" stroke-width="3"/>
+  <line x1="${PAD_LEFT}" y1="${threshY.toFixed(1)}" x2="${PAD_LEFT + innerW}" y2="${threshY.toFixed(1)}" stroke="#000000" stroke-opacity="0.2" stroke-width="6" stroke-dasharray="16,18"/>
 
   <!-- Dashed baseline -->
   <line x1="${PAD_LEFT}" y1="${chartBottom}" x2="${PAD_LEFT + innerW}" y2="${chartBottom}" stroke="#CCCCCC" stroke-width="2" stroke-dasharray="10,6"/>
@@ -135,13 +138,18 @@ function generateShareChartSVG(
   ${peakDot}
 
   <!-- Y-axis labels -->
-  <text x="${PAD_LEFT - 12}" y="${PAD_TOP + 16}" font-family="Georgia, 'Times New Roman', serif" font-size="26" fill="#555555" text-anchor="end">+60</text>
-  <text x="${PAD_LEFT - 12}" y="${(threshY + 9).toFixed(1)}" font-family="Georgia, 'Times New Roman', serif" font-size="26" fill="#E91E8C" font-weight="bold" text-anchor="end">spike</text>
-  <text x="${PAD_LEFT - 12}" y="${chartBottom - 4}" font-family="Georgia, 'Times New Roman', serif" font-size="26" fill="#555555" text-anchor="end">baseline</text>
+  <text x="${PAD_LEFT - 12}" y="${PAD_TOP + 20}" font-family="Georgia, 'Times New Roman', serif" font-size="34" fill="#555555" text-anchor="end">+60</text>
+  <text x="${PAD_LEFT - 12}" y="${(threshY + 12).toFixed(1)}" font-family="Georgia, 'Times New Roman', serif" font-size="34" fill="#E91E8C" font-weight="bold" text-anchor="end">spike</text>
+  <text x="${PAD_LEFT - 12}" y="${chartBottom - 4}" font-family="Georgia, 'Times New Roman', serif" font-size="34" fill="#555555" text-anchor="end">baseline</text>
+
+  <!-- Y-axis tick marks -->
+  <line x1="${PAD_LEFT}" y1="${(threshY).toFixed(1)}" x2="${(PAD_LEFT - 10)}" y2="${(threshY).toFixed(1)}" stroke="#888888" stroke-width="2"/>
+  <line x1="${PAD_LEFT}" y1="${PAD_TOP}" x2="${(PAD_LEFT - 10)}" y2="${PAD_TOP}" stroke="#888888" stroke-width="2"/>
+  <line x1="${PAD_LEFT}" y1="${chartBottom}" x2="${(PAD_LEFT - 10)}" y2="${chartBottom}" stroke="#888888" stroke-width="2"/>
 
   <!-- X-axis labels -->
-  <text x="${PAD_LEFT}" y="${chartBottom + 34}" font-family="Georgia, 'Times New Roman', serif" font-size="26" fill="#555555">eating time</text>
-  <text x="${PAD_LEFT + innerW}" y="${chartBottom + 34}" font-family="Georgia, 'Times New Roman', serif" font-size="26" fill="#555555" text-anchor="end">&#x2192; +3 hours</text>
+  <text x="${PAD_LEFT}" y="${chartBottom + 40}" font-family="Georgia, 'Times New Roman', serif" font-size="34" fill="#555555">eating time</text>
+  <text x="${PAD_LEFT + innerW}" y="${chartBottom + 40}" font-family="Georgia, 'Times New Roman', serif" font-size="34" fill="#555555" text-anchor="end">&#x2192; +3 hours</text>
 </svg>`;
 }
 

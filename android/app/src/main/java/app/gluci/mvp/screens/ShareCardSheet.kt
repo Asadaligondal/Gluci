@@ -125,7 +125,7 @@ fun ShareCardSheet(
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
-        containerColor = MaterialTheme.colorScheme.surface,
+        containerColor = Color(0xFFFAF8F5),
     ) {
         Column(
             modifier = Modifier
@@ -146,7 +146,7 @@ fun ShareCardSheet(
                     .fillMaxWidth()
                     .aspectRatio(9f / 16f)
                     .clip(RoundedCornerShape(18.dp))
-                    .background(Color.Black.copy(alpha = 0.05f)),
+                    .background(Color(0xFFE8E0D0)),
                 contentAlignment = Alignment.Center,
             ) {
                 AsyncImage(

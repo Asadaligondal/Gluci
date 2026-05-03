@@ -3,6 +3,7 @@ package app.gluci.mvp.ui.components
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -23,7 +24,10 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -34,11 +38,14 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import app.gluci.mvp.data.GluciCurvePoint
 import app.gluci.mvp.screens.reachableMediaUrl
 import coil.compose.AsyncImage
@@ -65,34 +72,79 @@ fun GlucoseCurveChart(
 ) {
     val resolvedImg = remember(foodImageUrl) { foodImageUrl?.reachableMediaUrl() }
     val title = remember(foodName) { foodName.trim().ifEmpty { "Your meal" } }
+    var showFullImage by remember { mutableStateOf(false) }
+
+    // Fullscreen image dialog
+    if (showFullImage && resolvedImg != null) {
+        Dialog(
+            onDismissRequest = { showFullImage = false },
+            properties = DialogProperties(usePlatformDefaultWidth = false),
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.92f))
+                    .clickable { showFullImage = false },
+                contentAlignment = Alignment.Center,
+            ) {
+                AsyncImage(
+                    model = resolvedImg,
+                    contentDescription = title,
+                    contentScale = ContentScale.Fit,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+        }
+    }
 
     Box(modifier = modifier.fillMaxWidth()) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .background(CreamBg, RoundedCornerShape(14.dp))
-                .border(1.dp, Color.Black, RoundedCornerShape(14.dp))
+                .border(2.dp, Color.Black, RoundedCornerShape(14.dp))
                 .padding(bottom = 8.dp),
         ) {
-            // Food title with pink underline
-            Column(
-                modifier = Modifier.padding(start = 14.dp, end = 14.dp, top = 10.dp, bottom = 6.dp),
+            // Food title row with decorative ticks
+            Row(
+                modifier = Modifier.padding(start = 14.dp, end = 14.dp, top = 10.dp, bottom = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text(
-                    text = title,
-                    fontSize = 15.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = Color(0xFF111111),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                Spacer(Modifier.height(3.dp))
-                Box(
-                    modifier = Modifier
-                        .width(48.dp)
-                        .height(2.dp)
-                        .background(PinkAccent),
-                )
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = title,
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Bold,
+                        fontFamily = FontFamily.Cursive,
+                        color = Color(0xFF111111),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Spacer(Modifier.height(3.dp))
+                    Box(
+                        modifier = Modifier
+                            .width(48.dp)
+                            .height(2.dp)
+                            .background(PinkAccent),
+                    )
+                }
+                // Asterisk ticks next to title
+                Canvas(modifier = Modifier.size(20.dp, 16.dp)) {
+                    val cx = size.width / 2
+                    val cy = size.height / 2
+                    val r = 5.dp.toPx()
+                    val angles = listOf(0.0, 60.0, 120.0, 180.0, 240.0, 300.0)
+                    for (a in angles) {
+                        val rad = Math.toRadians(a)
+                        drawLine(
+                            color = Color(0xFF888888),
+                            start = Offset(cx, cy),
+                            end = Offset(cx + (cos(rad) * r).toFloat(), cy + (sin(rad) * r).toFloat()),
+                            strokeWidth = 1.2.dp.toPx(),
+                            cap = StrokeCap.Round,
+                        )
+                    }
+                }
             }
 
             // Chart row
@@ -111,14 +163,16 @@ fun GlucoseCurveChart(
                 ) {
                     Text(
                         "+60",
-                        fontSize = 11.sp,
+                        fontSize = 13.sp,
+                        fontFamily = FontFamily.Cursive,
                         color = Color(0xFF555555),
                         textAlign = TextAlign.End,
                         modifier = Modifier.fillMaxWidth().padding(end = 4.dp),
                     )
                     Text(
                         "spike",
-                        fontSize = 11.sp,
+                        fontSize = 13.sp,
+                        fontFamily = FontFamily.Cursive,
                         color = PinkAccent,
                         fontWeight = FontWeight.Bold,
                         textAlign = TextAlign.End,
@@ -126,7 +180,8 @@ fun GlucoseCurveChart(
                     )
                     Text(
                         "baseline",
-                        fontSize = 11.sp,
+                        fontSize = 13.sp,
+                        fontFamily = FontFamily.Cursive,
                         color = Color(0xFF555555),
                         textAlign = TextAlign.End,
                         modifier = Modifier.fillMaxWidth().padding(end = 4.dp),
@@ -145,9 +200,42 @@ fun GlucoseCurveChart(
                         val thresholdY = h * (1f - 30f / MaxMgDl)
 
                         clipRect(0f, 0f, w, h) {
-                            // Zones
+                            // Colour zones
                             drawRect(ZoneGreenSoft, topLeft = Offset(0f, thresholdY), size = Size(w, h - thresholdY))
                             drawRect(ZonePinkSoft, topLeft = Offset.Zero, size = Size(w, thresholdY))
+
+                            // Solid border at zone colour boundary (spike threshold)
+                            drawLine(
+                                color = Color(0xFF333333).copy(alpha = 0.55f),
+                                start = Offset(0f, thresholdY),
+                                end = Offset(w, thresholdY),
+                                strokeWidth = 1.5.dp.toPx(),
+                            )
+                            // Dotted segments on that boundary for texture
+                            val dotLen = 4.dp.toPx()
+                            val dotGap = 5.dp.toPx()
+                            var dotX = 0f
+                            while (dotX < w) {
+                                drawLine(
+                                    color = Color.Black.copy(alpha = 0.25f),
+                                    start = Offset(dotX, thresholdY),
+                                    end = Offset(min(dotX + dotLen, w), thresholdY),
+                                    strokeWidth = 3.dp.toPx(),
+                                    cap = StrokeCap.Round,
+                                )
+                                dotX += dotLen + dotGap
+                            }
+
+                            // Y-axis tick marks at 20, 40, 60 mg/dL
+                            for (value in listOf(20f, 40f, 60f)) {
+                                val ty = h - (value / MaxMgDl) * h * 0.85f
+                                drawLine(
+                                    color = Color(0xFF888888),
+                                    start = Offset(0f, ty),
+                                    end = Offset(5.dp.toPx(), ty),
+                                    strokeWidth = 1.dp.toPx(),
+                                )
+                            }
 
                             // Dashed baseline at bottom
                             val dashW = 6.dp.toPx()
@@ -173,7 +261,6 @@ fun GlucoseCurveChart(
                                     )
                                 }
 
-                                // Solid black filled curve
                                 val fillPath = Path().apply {
                                     moveTo(mapped.first().x, h)
                                     lineTo(mapped.first().x, mapped.first().y)
@@ -211,10 +298,28 @@ fun GlucoseCurveChart(
                                 drawCircle(Color.White, radius = 5.dp.toPx(), center = peakCenter)
                                 drawCircle(Color(0xFF333333), radius = 3.dp.toPx(), center = peakCenter)
                             }
+
+                            // Radiating ticks around food image (top-right)
+                            if (resolvedImg != null) {
+                                val imgCx = w - 31.dp.toPx()
+                                val imgCy = 31.dp.toPx()
+                                val innerR = 29.dp.toPx()
+                                val outerR = 35.dp.toPx()
+                                for (i in 0 until 8) {
+                                    val rad = Math.toRadians(i * 45.0)
+                                    drawLine(
+                                        color = Color(0xFF333333).copy(alpha = 0.55f),
+                                        start = Offset(imgCx + (cos(rad) * innerR).toFloat(), imgCy + (sin(rad) * innerR).toFloat()),
+                                        end = Offset(imgCx + (cos(rad) * outerR).toFloat(), imgCy + (sin(rad) * outerR).toFloat()),
+                                        strokeWidth = 1.5.dp.toPx(),
+                                        cap = StrokeCap.Round,
+                                    )
+                                }
+                            }
                         }
                     }
 
-                    // Food image top-right corner
+                    // Food image — top-right, tappable for fullscreen
                     resolvedImg?.let { url ->
                         Box(
                             modifier = Modifier
@@ -222,7 +327,8 @@ fun GlucoseCurveChart(
                                 .padding(6.dp)
                                 .size(50.dp)
                                 .clip(RoundedCornerShape(8.dp))
-                                .background(Color.White),
+                                .background(Color.White)
+                                .clickable { showFullImage = true },
                         ) {
                             AsyncImage(
                                 model = url,
@@ -242,26 +348,25 @@ fun GlucoseCurveChart(
                     .padding(start = 60.dp, end = 8.dp, top = 2.dp, bottom = 2.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
             ) {
-                Text("eating time", fontSize = 11.sp, color = Color(0xFF555555))
-                Text("→ +3 hours", fontSize = 11.sp, color = Color(0xFF555555))
+                Text("eating time", fontSize = 13.sp, fontFamily = FontFamily.Cursive, color = Color(0xFF555555))
+                Text("→ +3 hours", fontSize = 13.sp, fontFamily = FontFamily.Cursive, color = Color(0xFF555555))
             }
         }
 
-        // Small share icon — bottom-right of chart card
+        // Share icon — top-right of card, no background
         if (onShare != null) {
             IconButton(
                 onClick = { onShare.invoke() },
                 modifier = Modifier
-                    .align(Alignment.BottomEnd)
-                    .padding(6.dp)
-                    .size(28.dp)
-                    .background(Color(0xFF1B5E20).copy(alpha = 0.85f), CircleShape),
+                    .align(Alignment.TopEnd)
+                    .padding(4.dp)
+                    .size(28.dp),
             ) {
                 Icon(
                     imageVector = Icons.Default.Share,
                     contentDescription = "Share",
-                    tint = Color.White,
-                    modifier = Modifier.size(14.dp),
+                    tint = Color(0xFF1B5E20),
+                    modifier = Modifier.size(16.dp),
                 )
             }
         }
