@@ -8,16 +8,12 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Science
-import androidx.compose.material.icons.filled.Share
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -130,6 +126,7 @@ fun FoodResultCard(
             curvePoints = curvePoints,
             foodName = foodName,
             foodImageUrl = foodImageUrl,
+            onShare = onShare,
         )
 
         if (tip.isNotBlank()) {
@@ -155,18 +152,5 @@ fun FoodResultCard(
             }
         }
 
-        Button(
-            onClick = onShare,
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(48.dp),
-            enabled = shareCardUrl != null,
-            shape = RoundedCornerShape(24.dp),
-            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1B5E20)),
-        ) {
-            Icon(Icons.Filled.Share, contentDescription = null, modifier = Modifier.size(18.dp))
-            Spacer(Modifier.width(8.dp))
-            Text("Share GlucoseGal card", fontSize = 15.sp, fontWeight = FontWeight.Medium)
-        }
     }
 }

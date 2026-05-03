@@ -34,21 +34,21 @@ export type CurvePoint = { minute: number; mg_dl: number };
 
 const CARD_W = 1080;
 const CARD_H = 1350;
-const PHOTO_H = 480;
-const CHART_Y = 740;
-const CHART_SVG_H = 460;
+const CHART_Y = 260;
+const CHART_SVG_H = 700;
 
 const CURVE_MAX_Y = 80;
 const CURVE_THRESHOLD = 30;
 
-/**
- * Glucosegoddess illustration style: cream bg, black border, black filled curve,
- * Georgia serif labels, food title above with pink underline, spike tick marks.
- * Returns a complete <svg> element (1080×460).
- */
-function generateShareChartSVG(points: CurvePoint[], peak: number, foodName: string): string {
-  const SVG_W = CARD_W;
-  const SVG_H = CHART_SVG_H;
+function generateShareChartSVG(
+  points: CurvePoint[],
+  peak: number,
+  foodName: string,
+  svgW = CARD_W,
+  svgH = CHART_SVG_H,
+): string {
+  const SVG_W = svgW;
+  const SVG_H = svgH;
   const PAD_LEFT = 100;
   const PAD_RIGHT = 30;
   const PAD_TOP = 80;
@@ -250,7 +250,7 @@ async function buildRoundedThumb(input: sharp.Sharp): Promise<Buffer> {
   return sharp(resized).composite([{ input: maskBuf, blend: "dest-in" }]).png().toBuffer();
 }
 
-/** Instagram portrait 1080×1350 — glucosegoddess illustration style. */
+/** Instagram portrait 1080×1350 — chart-as-hero layout. */
 export async function renderShareCard(params: {
   score: number;
   verdict: string;
@@ -261,7 +261,6 @@ export async function renderShareCard(params: {
   glucoseCurve?: CurvePoint[];
   foodName?: string;
 }): Promise<{ relativeUrl: string; absolutePath: string }> {
-  await mkdir(DATA_DIR, { recursive: true });
   const id = `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
   const filename = `card-${id}.png`;
   const absolutePath = path.join(DATA_DIR, filename);
@@ -271,91 +270,28 @@ export async function renderShareCard(params: {
 
   const composites: sharp.OverlayOptions[] = [];
 
-  // ── Hero photo (top 480px) with fade to cream ─────────────────────────────
-  let thumbInput: sharp.Sharp | null = null;
+  // ── 1. Header SVG (0–260px): logo, score, food name, verdict ─────────────
+  const foodTitle = escapeXml((params.foodName ?? "Your meal").slice(0, 36));
+  const scoreNum = escapeXml(params.score.toFixed(1));
+  const scoreCol = scoreDisplayColor(params.score);
+  const vp = verdictPillLight(params.verdict);
+  const badgeVerdict = escapeXml(verdictBadgeLabel(params.verdict));
+  const underlineW = Math.min(Math.max((params.foodName ?? "").length * 22, 40), 700);
 
-  if (params.heroImagePath && fs.existsSync(params.heroImagePath)) {
-    const heroStripBuf = await sharp(params.heroImagePath)
-      .rotate()
-      .resize(W, PHOTO_H, { fit: "cover", position: "center" })
-      .png()
-      .toBuffer();
+  const headerSVG = `<svg width="${W}" height="260" xmlns="http://www.w3.org/2000/svg">
+  <rect width="${W}" height="260" fill="#FAF8F5"/>
+  <text x="60" y="75" font-family="Georgia, 'Times New Roman', serif" font-weight="bold" font-size="52" fill="#E91E8C">Gluci</text>
+  <text x="${W - 60}" y="110" font-family="Georgia, 'Times New Roman', serif" font-weight="bold" font-size="100" fill="${scoreCol}" text-anchor="end">${scoreNum}</text>
+  <text x="${W - 60}" y="152" font-family="Georgia, 'Times New Roman', serif" font-size="40" fill="#888888" text-anchor="end">/10</text>
+  <text x="60" y="178" font-family="Georgia, 'Times New Roman', serif" font-weight="bold" font-size="40" fill="#1A1A1A">${foodTitle}</text>
+  <line x1="60" y1="188" x2="${60 + underlineW}" y2="188" stroke="#E91E8C" stroke-width="3" stroke-linecap="round"/>
+  <rect x="60" y="205" width="200" height="52" rx="26" fill="${vp.bg}"/>
+  <text x="160" y="238" font-family="Georgia, 'Times New Roman', serif" font-weight="bold" font-size="26" fill="${vp.fg}" text-anchor="middle">${badgeVerdict}</text>
+</svg>`;
+  const headerBuf = await sharp(Buffer.from(headerSVG)).png().toBuffer();
+  composites.push({ input: headerBuf, left: 0, top: 0 });
 
-    const fadeSvg = `<svg width="${W}" height="${PHOTO_H}" xmlns="http://www.w3.org/2000/svg">
-      <defs>
-        <linearGradient id="fade" gradientUnits="userSpaceOnUse" x1="0" y1="320" x2="0" y2="${PHOTO_H}">
-          <stop offset="0%" stop-color="#FAF8F5" stop-opacity="0"/>
-          <stop offset="100%" stop-color="#FAF8F5" stop-opacity="1"/>
-        </linearGradient>
-      </defs>
-      <rect x="0" y="320" width="${W}" height="${PHOTO_H - 320}" fill="url(#fade)"/>
-    </svg>`;
-    const fadeBuf = await sharp(Buffer.from(fadeSvg)).png().toBuffer();
-
-    const heroLayer = await sharp({
-      create: { width: W, height: PHOTO_H, channels: 4, background: { r: 250, g: 248, b: 245, alpha: 0 } },
-    })
-      .composite([
-        { input: heroStripBuf, left: 0, top: 0 },
-        { input: fadeBuf, left: 0, top: 0 },
-      ])
-      .png()
-      .toBuffer();
-
-    composites.push({ input: heroLayer, left: 0, top: 0 });
-    thumbInput = sharp(params.heroImagePath).rotate();
-  } else if (params.heroImageUrl) {
-    let rawBuf: Buffer | null = null;
-    if (params.heroImageUrl.startsWith("http")) {
-      try {
-        const imgRes = await fetch(params.heroImageUrl);
-        if (imgRes.ok) rawBuf = Buffer.from(await imgRes.arrayBuffer());
-      } catch {
-        /* fall through to placeholder */
-      }
-    }
-
-    if (rawBuf) {
-      const heroStripBuf = await sharp(rawBuf)
-        .resize(W, PHOTO_H, { fit: "cover", position: "center" })
-        .png()
-        .toBuffer();
-
-      const fadeSvg = `<svg width="${W}" height="${PHOTO_H}" xmlns="http://www.w3.org/2000/svg">
-        <defs>
-          <linearGradient id="fade" gradientUnits="userSpaceOnUse" x1="0" y1="320" x2="0" y2="${PHOTO_H}">
-            <stop offset="0%" stop-color="#FAF8F5" stop-opacity="0"/>
-            <stop offset="100%" stop-color="#FAF8F5" stop-opacity="1"/>
-          </linearGradient>
-        </defs>
-        <rect x="0" y="320" width="${W}" height="${PHOTO_H - 320}" fill="url(#fade)"/>
-      </svg>`;
-      const fadeBuf = await sharp(Buffer.from(fadeSvg)).png().toBuffer();
-
-      const heroLayer = await sharp({
-        create: { width: W, height: PHOTO_H, channels: 4, background: { r: 250, g: 248, b: 245, alpha: 0 } },
-      })
-        .composite([
-          { input: heroStripBuf, left: 0, top: 0 },
-          { input: fadeBuf, left: 0, top: 0 },
-        ])
-        .png()
-        .toBuffer();
-
-      composites.push({ input: heroLayer, left: 0, top: 0 });
-      thumbInput = sharp(rawBuf);
-    } else {
-      const pName = escapeXml((params.foodName ?? "Your meal").slice(0, 40));
-      const placeholderSvg = `<svg width="${W}" height="${PHOTO_H}" xmlns="http://www.w3.org/2000/svg">
-        <rect width="${W}" height="${PHOTO_H}" fill="#FAF8F5"/>
-        <text x="${W / 2}" y="${PHOTO_H / 2 + 16}" font-family="Georgia, serif" font-size="44" fill="#AAAAAA" text-anchor="middle">${pName}</text>
-      </svg>`;
-      const placeholderBuf = await sharp(Buffer.from(placeholderSvg)).resize(W, PHOTO_H).png().toBuffer();
-      composites.push({ input: placeholderBuf, left: 0, top: 0 });
-    }
-  }
-
-  // ── Chart SVG composited as separate layer ────────────────────────────────
+  // ── 2. Chart SVG (260–960px, 700px tall) ─────────────────────────────────
   const peak = params.glucoseCurve?.length
     ? Math.max(...params.glucoseCurve.map((p) => p.mg_dl))
     : 0;
@@ -363,64 +299,51 @@ export async function renderShareCard(params: {
     params.glucoseCurve ?? [],
     peak,
     params.foodName ?? "Your meal",
+    W,
+    CHART_SVG_H,
   );
   const chartBuf = await sharp(Buffer.from(chartSvgStr)).png().toBuffer();
   composites.push({ input: chartBuf, left: 0, top: CHART_Y });
 
-  // ── Food thumbnail top-right of chart area ────────────────────────────────
-  if (thumbInput) {
+  // ── 3. Food thumbnail inside chart, top-right ─────────────────────────────
+  let rawImgBuf: Buffer | null = null;
+  if (params.heroImagePath && fs.existsSync(params.heroImagePath)) {
+    rawImgBuf = await sharp(params.heroImagePath).rotate().png().toBuffer();
+  } else if (params.heroImageUrl?.startsWith("http")) {
     try {
-      const roundedThumb = await buildRoundedThumb(thumbInput);
-      composites.push({ input: roundedThumb, left: 860, top: 720 });
-    } catch {
-      /* skip thumbnail on error */
-    }
+      const imgRes = await fetch(params.heroImageUrl);
+      if (imgRes.ok) rawImgBuf = Buffer.from(await imgRes.arrayBuffer());
+    } catch { /* skip */ }
+  }
+  if (rawImgBuf) {
+    try {
+      const thumb = await buildRoundedThumb(sharp(rawImgBuf));
+      composites.push({ input: thumb, left: W - 180, top: CHART_Y + 20 });
+    } catch { /* skip on error */ }
   }
 
-  // ── Content overlay SVG (logo, score, food name, verdict, tip, footer) ────
-  const foodTitle = escapeXml((params.foodName ?? "Your meal").slice(0, 40));
-  const scoreNum = escapeXml(params.score.toFixed(1));
-  const scoreCol = scoreDisplayColor(params.score);
-  const vp = verdictPillLight(params.verdict);
-  const badgeVerdict = escapeXml(verdictBadgeLabel(params.verdict));
+  // ── 4. Tip box SVG (990–1150px) ───────────────────────────────────────────
   const { line1, line2 } = tipTwoLines(params.insight);
   const tipLine1 = escapeXml(line1);
   const tipLine2 = escapeXml(line2);
-  const footer = escapeXml(params.subtitle ?? "gluci.app");
-
-  const tipBoxH = tipLine2 ? 78 : 54;
-  const tipSection = tipLine1
-    ? `<rect x="60" y="1212" width="960" height="${tipBoxH}" rx="12" fill="#FFFBF0" stroke="#DDCCAA" stroke-width="1.5"/>
-  <text x="84" y="1244" font-family="Georgia, 'Times New Roman', serif" font-size="26" fill="#555555">&#x2022; ${tipLine1}</text>
-  ${tipLine2 ? `<text x="84" y="1274" font-family="Georgia, 'Times New Roman', serif" font-size="26" fill="#555555">${tipLine2}</text>` : ""}`
-    : "";
-
-  const contentSVG = `<svg width="${W}" height="${H}" xmlns="http://www.w3.org/2000/svg">
-
-  <!-- Gluci logo -->
-  <text x="60" y="530" font-family="Georgia, 'Times New Roman', serif" font-weight="bold" font-size="52" fill="#E91E63">Gluci</text>
-
-  <!-- Score -->
-  <text x="${W - 60}" y="572" font-family="Georgia, 'Times New Roman', serif" font-weight="bold" font-size="110" fill="${scoreCol}" text-anchor="end">${scoreNum}</text>
-  <text x="${W - 60}" y="636" font-family="Georgia, 'Times New Roman', serif" font-size="44" fill="#888888" text-anchor="end">/10</text>
-
-  <!-- Food name -->
-  <text x="60" y="648" font-family="Georgia, 'Times New Roman', serif" font-size="34" fill="#333333">${foodTitle}</text>
-
-  <!-- Verdict badge -->
-  <rect x="60" y="664" width="210" height="58" rx="29" fill="${vp.bg}"/>
-  <text x="165" y="700" font-family="Georgia, 'Times New Roman', serif" font-weight="bold" font-size="29" fill="${vp.fg}" text-anchor="middle">${badgeVerdict}</text>
-
-  <!-- Tip box -->
-  ${tipSection}
-
-  <!-- Footer bar -->
-  <rect x="0" y="1318" width="${W}" height="32" fill="#F5EFE0"/>
-  <text x="${W / 2}" y="1341" font-family="Georgia, 'Times New Roman', serif" font-size="22" fill="#9E9E9E" text-anchor="middle">${footer}</text>
+  if (tipLine1) {
+    const tipBoxH = tipLine2 ? 130 : 100;
+    const tipSVG = `<svg width="${W}" height="160" xmlns="http://www.w3.org/2000/svg">
+  <rect x="60" y="10" width="${W - 120}" height="${tipBoxH}" rx="16" fill="white" stroke="#CCCCCC" stroke-width="2"/>
+  <text x="90" y="52" font-family="Georgia, 'Times New Roman', serif" font-size="26" fill="#444444">&#x2022; ${tipLine1}</text>
+  ${tipLine2 ? `<text x="90" y="92" font-family="Georgia, 'Times New Roman', serif" font-size="26" fill="#444444">${tipLine2}</text>` : ""}
 </svg>`;
+    const tipBuf = await sharp(Buffer.from(tipSVG)).png().toBuffer();
+    composites.push({ input: tipBuf, left: 0, top: 990 });
+  }
 
-  const contentBuf = await sharp(Buffer.from(contentSVG)).png().toBuffer();
-  composites.push({ input: contentBuf, left: 0, top: 0 });
+  // ── 5. Footer (1180–1350px) ───────────────────────────────────────────────
+  const footer = escapeXml(params.subtitle ?? "gluci.app");
+  const footerSVG = `<svg width="${W}" height="170" xmlns="http://www.w3.org/2000/svg">
+  <text x="${W / 2}" y="60" font-family="Georgia, 'Times New Roman', serif" font-size="28" fill="#9E9E9E" text-anchor="middle">${footer}</text>
+</svg>`;
+  const footerBuf = await sharp(Buffer.from(footerSVG)).png().toBuffer();
+  composites.push({ input: footerBuf, left: 0, top: 1180 });
 
   // ── Composite all layers onto cream base ──────────────────────────────────
   const pngBuf = await sharp({
