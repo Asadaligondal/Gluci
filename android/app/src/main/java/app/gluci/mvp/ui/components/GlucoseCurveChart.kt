@@ -164,9 +164,13 @@ fun GlucoseCurveChart(
                             }
 
                             if (curvePoints.size >= 2) {
+                                val actualMax = curvePoints.maxOf { it.mgDl }.toFloat()
+                                val scaleCeiling = maxOf(actualMax * 1.1f, MaxMgDl)
                                 val mapped = curvePoints.map { pt ->
-                                    val yn = (pt.mgDl.toFloat() / MaxMgDl).coerceIn(0f, 1f)
-                                    Offset(x = (pt.minute / 180f) * w, y = h - yn * h)
+                                    Offset(
+                                        x = (pt.minute / 180f) * w,
+                                        y = h - (pt.mgDl.toFloat() / scaleCeiling) * h * 0.85f,
+                                    )
                                 }
 
                                 // Solid black filled curve
@@ -246,18 +250,18 @@ fun GlucoseCurveChart(
         // Small share icon — bottom-right of chart card
         if (onShare != null) {
             IconButton(
-                onClick = onShare,
+                onClick = { onShare.invoke() },
                 modifier = Modifier
                     .align(Alignment.BottomEnd)
-                    .padding(8.dp)
-                    .size(36.dp)
-                    .background(Color(0xFF1B5E20), CircleShape),
+                    .padding(6.dp)
+                    .size(28.dp)
+                    .background(Color(0xFF1B5E20).copy(alpha = 0.85f), CircleShape),
             ) {
                 Icon(
                     imageVector = Icons.Default.Share,
                     contentDescription = "Share",
                     tint = Color.White,
-                    modifier = Modifier.size(18.dp),
+                    modifier = Modifier.size(14.dp),
                 )
             }
         }

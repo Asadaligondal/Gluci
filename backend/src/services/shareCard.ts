@@ -60,9 +60,15 @@ function generateShareChartSVG(
   const chartBottom = PAD_TOP + innerH;
   const threshY = PAD_TOP + innerH * (1 - CURVE_THRESHOLD / MAX_Y);
 
+  const actualPeak = points.length ? Math.max(...points.map((p) => p.mg_dl)) : MAX_Y;
+  const scaleCeiling = Math.max(actualPeak * 1.1, MAX_Y);
+
   const pts = points.map((p) => ({
     x: PAD_LEFT + (p.minute / 180) * innerW,
-    y: PAD_TOP + innerH - Math.min((p.mg_dl / MAX_Y) * innerH, innerH),
+    y: PAD_TOP + innerH - Math.min(
+      (p.mg_dl / scaleCeiling) * innerH * 0.85,
+      innerH * 0.88,
+    ),
   }));
 
   let curvePath = "";
@@ -261,6 +267,7 @@ export async function renderShareCard(params: {
   glucoseCurve?: CurvePoint[];
   foodName?: string;
 }): Promise<{ relativeUrl: string; absolutePath: string }> {
+  console.log('[shareCard] generating NEW layout v2');
   const id = `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
   const filename = `card-${id}.png`;
   const absolutePath = path.join(DATA_DIR, filename);
