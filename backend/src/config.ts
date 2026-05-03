@@ -17,6 +17,8 @@ const envSchema = z.object({
   STRIPE_PRICE_ID: z.string().optional(),
   CRON_SECRET: z.string().optional(),
   MARKETING_SITE_URL: z.string().url().optional(),
+  SUPABASE_URL: z.string().optional(),
+  SUPABASE_SERVICE_ROLE_KEY: z.string().optional(),
   JWT_SECRET: z
     .string()
     .min(1)

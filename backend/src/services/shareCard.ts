@@ -2,9 +2,33 @@ import fs from "fs";
 import sharp from "sharp";
 import { mkdir, writeFile } from "fs/promises";
 import path from "path";
+import { createClient } from "@supabase/supabase-js";
 import { getConfig } from "../config.js";
 
 const DATA_DIR = path.join(process.cwd(), "data", "cards");
+
+function getSupabase() {
+  const cfg = getConfig();
+  if (!cfg.SUPABASE_URL || !cfg.SUPABASE_SERVICE_ROLE_KEY) return null;
+  return createClient(cfg.SUPABASE_URL, cfg.SUPABASE_SERVICE_ROLE_KEY);
+}
+
+async function uploadToSupabase(
+  bucket: string,
+  filename: string,
+  data: Buffer,
+  contentType: string
+): Promise<string | null> {
+  const supabase = getSupabase();
+  if (!supabase) return null;
+  const { error } = await supabase.storage.from(bucket).upload(filename, data, {
+    contentType,
+    upsert: true,
+  });
+  if (error) { console.error("Supabase upload error:", error.message); return null; }
+  const { data: pub } = supabase.storage.from(bucket).getPublicUrl(filename);
+  return pub.publicUrl;
+}
 
 export type CurvePoint = { minute: number; mg_dl: number };
 
@@ -399,23 +423,37 @@ export async function renderShareCard(params: {
   composites.push({ input: contentBuf, left: 0, top: 0 });
 
   // ── Composite all layers onto cream base ──────────────────────────────────
-  await sharp({
+  const pngBuf = await sharp({
     create: { width: W, height: H, channels: 4, background: { r: 250, g: 248, b: 245, alpha: 1 } },
   })
     .composite(composites)
     .png({ compressionLevel: 4 })
-    .toFile(absolutePath);
+    .toBuffer();
 
+  // Try Supabase Storage first; fall back to local disk
+  const supabaseUrl = await uploadToSupabase("cards", filename, pngBuf, "image/png");
+  if (supabaseUrl) {
+    return { relativeUrl: supabaseUrl, absolutePath: "" };
+  }
+
+  await mkdir(DATA_DIR, { recursive: true });
+  await writeFile(absolutePath, pngBuf);
   const base = getConfig().PUBLIC_BASE_URL.replace(/\/$/, "");
   return { relativeUrl: `${base}/static/cards/${filename}`, absolutePath };
 }
 
 export async function saveUploadBase64(base64: string, mime: string): Promise<string> {
-  const dir = path.join(process.cwd(), "data", "uploads");
-  await mkdir(dir, { recursive: true });
   const ext = mime.includes("png") ? "png" : mime.includes("webp") ? "webp" : "jpg";
   const name = `up-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+  const buf = Buffer.from(base64, "base64");
+
+  // Try Supabase Storage first; fall back to local disk
+  const supabaseUrl = await uploadToSupabase("uploads", name, buf, mime);
+  if (supabaseUrl) return supabaseUrl;
+
+  const dir = path.join(process.cwd(), "data", "uploads");
+  await mkdir(dir, { recursive: true });
   const full = path.join(dir, name);
-  await writeFile(full, Buffer.from(base64, "base64"));
+  await writeFile(full, buf);
   return name;
 }

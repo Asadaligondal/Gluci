@@ -60,7 +60,11 @@ historyRouter.get("/", async (req: AuthedRequest, res) => {
         }
       }
       const imageUrl =
-        m.imageUrl && m.imageUrl.length > 0 ? `${base}/static/uploads/${m.imageUrl}` : null;
+        m.imageUrl && m.imageUrl.length > 0
+          ? m.imageUrl.startsWith("http")
+            ? m.imageUrl
+            : `${base}/static/uploads/${m.imageUrl}`
+          : null;
       return {
         id: m.id,
         role: m.role,
