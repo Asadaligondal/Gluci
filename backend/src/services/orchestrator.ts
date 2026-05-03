@@ -499,14 +499,16 @@ export async function handleChatTurn(params: {
     const shareRef = await ensureShareRef(user.id);
     const baseUrl = cfg.PUBLIC_BASE_URL.replace(/\/$/, "");
     shareLandingUrl = `${baseUrl}/r/${shareRef}`;
-    const heroAbs = userImageFilename ? path.join(process.cwd(), "data", "uploads", userImageFilename) : undefined;
+    const isSupabaseUrl = userImageFilename?.startsWith("http");
+    const heroAbs = (userImageFilename && !isSupabaseUrl) ? path.join(process.cwd(), "data", "uploads", userImageFilename) : undefined;
+    const heroUrl = (userImageFilename && isSupabaseUrl) ? userImageFilename : undefined;
     const card = await renderShareCard({
       score: structured.glucoseGalScore,
       verdict: structured.verdict,
       insight: structured.userReply.slice(0, 400),
       subtitle: `Join Gluci: ${shareLandingUrl}`,
       heroImagePath: heroAbs,
-      heroImageUrl: !heroAbs ? productImageUrl : undefined,
+      heroImageUrl: heroUrl ?? (!heroAbs ? productImageUrl : undefined),
       glucoseCurve: structured.glucoseCurve,
       foodName: foodLabel,
     });
@@ -591,7 +593,7 @@ export async function handleChatTurn(params: {
     // For barcode food scans: return OFF product image as userImageUrl so Android
     // can display it in FoodResultCard via mealImageUrl
     userImageUrl: userImageFilename
-      ? `${base}/static/uploads/${userImageFilename}`
+      ? (userImageFilename.startsWith("http") ? userImageFilename : `${base}/static/uploads/${userImageFilename}`)
       : productImageUrl,
     food: foodLabel,
   };
