@@ -17,17 +17,18 @@ export async function createAppUser() {
 }
 
 export async function getOrCreateTelegramUser(chatId: string) {
-  let user = await prisma.user.findUnique({
+  const existing = await prisma.user.findUnique({
     where: { telegramChatId: chatId },
     include: { profile: true },
   });
-  if (!user) {
-    user = await prisma.user.create({
-      data: { telegramChatId: chatId, profile: { create: {} } },
-      include: { profile: true },
-    });
-  }
-  return user;
+  if (existing) return { user: existing, isNew: false };
+
+  const created = await prisma.user.create({
+    data: { telegramChatId: chatId, profile: { create: {} } },
+    include: { profile: true },
+  });
+  console.log(`[telegram] Created guest user for chatId: ${chatId}`, { userId: created.id });
+  return { user: created, isNew: true };
 }
 
 export async function getOrCreateWhatsAppUser(waId: string) {

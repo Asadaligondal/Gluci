@@ -35,6 +35,28 @@ async function waSendText(to: string, body: string) {
   }
 }
 
+async function waSendImage(to: string, imageUrl: string, caption: string) {
+  const cfg = getConfig();
+  const token = cfg.WHATSAPP_ACCESS_TOKEN;
+  const phoneId = cfg.WHATSAPP_PHONE_NUMBER_ID;
+  if (!token || !phoneId) return;
+
+  const url = `https://graph.facebook.com/v21.0/${phoneId}/messages`;
+  await fetch(url, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      messaging_product: "whatsapp",
+      to,
+      type: "image",
+      image: { link: imageUrl, caption: caption.slice(0, 1024) },
+    }),
+  });
+}
+
 async function waDownloadMedia(mediaId: string): Promise<{ base64: string; mime: string } | null> {
   const cfg = getConfig();
   const token = cfg.WHATSAPP_ACCESS_TOKEN;
@@ -142,4 +164,14 @@ export async function handleWhatsAppPayload(body: Record<string, unknown>) {
   });
 
   await waSendText(from, out.reply);
+
+  if (out.shareCardUrl) {
+    const cfg = getConfig();
+    const cardUrl = out.shareCardUrl.startsWith("http")
+      ? out.shareCardUrl
+      : `${cfg.PUBLIC_BASE_URL}${out.shareCardUrl}`;
+    const scoreLabel = out.structured.glucoseGalScore != null ? `Score: ${out.structured.glucoseGalScore}/10` : "";
+    const verdictLabel = out.structured.verdict ? ` | ${out.structured.verdict.toUpperCase()}` : "";
+    await waSendImage(from, cardUrl, `${scoreLabel}${verdictLabel}`.trim() || "Your Gluci result");
+  }
 }

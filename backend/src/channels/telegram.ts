@@ -43,6 +43,14 @@ export async function sendTelegramMessage(chatId: string, text: string) {
   });
 }
 
+async function sendTelegramPhoto(chatId: string, photoUrl: string, caption: string) {
+  await tgMethod("sendPhoto", {
+    chat_id: chatId,
+    photo: photoUrl,
+    caption: caption.slice(0, 1024),
+  });
+}
+
 function mimeFromPathOrHint(filePath: string, mimeHint?: string): string {
   if (mimeHint && mimeHint.startsWith("image/")) return mimeHint;
   const p = filePath.toLowerCase();
@@ -83,7 +91,10 @@ export async function handleTelegramUpdate(update: Record<string, unknown>) {
     return;
   }
 
-  const user = await getOrCreateTelegramUser(chatId);
+  const from = msg.from as { first_name?: string; last_name?: string; username?: string } | undefined;
+  const firstName = from?.first_name || "there";
+
+  const { user, isNew } = await getOrCreateTelegramUser(chatId);
 
   if (/^\/stop(?:@\w+)?$/i.test(text)) {
     await prisma.user.update({ where: { id: user.id }, data: { reengagementOptOut: true } });
@@ -96,7 +107,21 @@ export async function handleTelegramUpdate(update: Record<string, unknown>) {
     return;
   }
 
-  if (
+  if (isNew) {
+    await sendTelegramMessage(
+      chatId,
+      `👋 Welcome to Gluci, ${firstName}!\n\n` +
+        "I'm your personal glucose coach. Send me:\n" +
+        "📸 A photo of your food\n" +
+        "📝 A description of what you ate\n" +
+        "🔍 A grocery barcode\n\n" +
+        "I'll tell you the glucose impact, give you a score out of 10, and share tips to eat better.\n\n" +
+        "Try it now — send me a food photo! 🍎\n\n" +
+        "Commands:\n/stop — mute daily check-in nudges\n/notify — turn nudges back on",
+    );
+    await prisma.user.update({ where: { id: user.id }, data: { telegramOnboardingSent: true } });
+    if (/^\/start(?:@\w+)?\s*$/i.test(text)) return;
+  } else if (
     /^\/start(?:@\w+)?\s*$/i.test(text) &&
     !(msg.photo as unknown[])?.length &&
     !isImageDocument(msg.document as { file_id?: string; mime_type?: string; file_name?: string } | undefined)
@@ -133,7 +158,7 @@ export async function handleTelegramUpdate(update: Record<string, unknown>) {
   const m = text.match(/\b(\d{8,14})\b/);
   if (m) barcode = m[1];
 
-  if (!user.telegramOnboardingSent && (text || imageBase64)) {
+  if (!isNew && !user.telegramOnboardingSent && (text || imageBase64)) {
     await prisma.user.update({ where: { id: user.id }, data: { telegramOnboardingSent: true } });
     await sendTelegramMessage(chatId, ONBOARDING);
   }
@@ -160,4 +185,24 @@ export async function handleTelegramUpdate(update: Record<string, unknown>) {
   });
 
   await sendTelegramMessage(chatId, out.reply);
+
+  if (out.shareCardUrl) {
+    const cfg = getConfig();
+    const cardUrl = out.shareCardUrl.startsWith("http")
+      ? out.shareCardUrl
+      : `${cfg.PUBLIC_BASE_URL}${out.shareCardUrl}`;
+    const scoreLabel = out.structured.glucoseGalScore != null ? `Score: ${out.structured.glucoseGalScore}/10` : "";
+    const verdictLabel = out.structured.verdict ? ` | ${out.structured.verdict.toUpperCase()}` : "";
+    await sendTelegramPhoto(chatId, cardUrl, `${scoreLabel}${verdictLabel}`.trim() || "Your Gluci result");
+  }
+
+  const mealCount = await prisma.usageEvent.count({ where: { userId: user.id } });
+  if (mealCount > 0 && mealCount % 3 === 0) {
+    await sendTelegramMessage(
+      chatId,
+      `🌟 You've analyzed ${mealCount} meals with Gluci!\n\n` +
+        "Want to track your progress over time?\n" +
+        "Download the Gluci app to see your glucose history, weekly trends, and more.",
+    );
+  }
 }
