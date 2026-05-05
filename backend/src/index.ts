@@ -80,13 +80,11 @@ app.get("/r/:ref", async (req, res) => {
   res.redirect(302, `${dest}${join}utm_source=gluci_share&ref=${encodeURIComponent(ref)}`);
 });
 
-app.post("/webhooks/telegram", async (req, res) => {
-  try {
-    await handleTelegramUpdate(req.body as Record<string, unknown>);
-  } catch (e) {
-    console.error("telegram webhook", e);
-  }
+app.post("/webhooks/telegram", (req, res) => {
   res.sendStatus(200);
+  handleTelegramUpdate(req.body as Record<string, unknown>).catch((e) =>
+    console.error("telegram webhook", e),
+  );
 });
 
 app.get("/webhooks/whatsapp", (req, res) => {
@@ -98,13 +96,11 @@ app.get("/webhooks/whatsapp", (req, res) => {
   res.sendStatus(403);
 });
 
-app.post("/webhooks/whatsapp", async (req, res) => {
-  try {
-    await handleWhatsAppPayload(req.body as Record<string, unknown>);
-  } catch (e) {
-    console.error("whatsapp webhook", e);
-  }
+app.post("/webhooks/whatsapp", (req, res) => {
   res.sendStatus(200);
+  handleWhatsAppPayload(req.body as Record<string, unknown>).catch((e) =>
+    console.error("whatsapp webhook", e),
+  );
 });
 
 app.use((err: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {

@@ -5,6 +5,8 @@ import { handleChatTurn } from "../services/orchestrator.js";
 import { getOrCreateChannelConversation } from "../services/conversationService.js";
 import { tryLinkWhatsAppByCode } from "../services/linking.js";
 
+const processedMsgIds = new Set<string>();
+
 const WA_ONBOARDING =
   "Welcome to Gluci — text me before you eat: meal photos, restaurant questions, or a grocery barcode number. " +
   "Reply STOP NUDGES to mute daily check-ins, NOTIFY to turn them back on.";
@@ -89,6 +91,16 @@ export async function handleWhatsAppPayload(body: Record<string, unknown>) {
 
   const from = String(msg.from ?? "");
   if (!from) return;
+
+  const msgId = String(msg.id ?? "");
+  if (msgId && processedMsgIds.has(msgId)) return;
+  if (msgId) {
+    processedMsgIds.add(msgId);
+    if (processedMsgIds.size > 500) {
+      const first = processedMsgIds.values().next().value;
+      if (first) processedMsgIds.delete(first);
+    }
+  }
 
   let text = "";
   if (msg.type === "text" && msg.text && typeof (msg.text as { body?: string }).body === "string") {
