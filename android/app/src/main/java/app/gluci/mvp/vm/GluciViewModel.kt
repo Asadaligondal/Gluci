@@ -22,6 +22,7 @@ import app.gluci.mvp.data.GluciCurvePoint
 import app.gluci.mvp.data.WeekDailyBarDto
 import app.gluci.mvp.data.parseGlucoseCurve
 import androidx.compose.ui.graphics.Color
+import com.google.firebase.messaging.FirebaseMessaging
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -204,6 +205,18 @@ class GluciViewModel(app: Application) : AndroidViewModel(app) {
                 refreshProfile()
                 refreshChannels()
                 refreshSummaries()
+                uploadFcmToken()
+            }
+        }
+    }
+
+    fun uploadFcmToken() {
+        val t = _token.value ?: return
+        FirebaseMessaging.getInstance().token.addOnSuccessListener { fcmToken ->
+            viewModelScope.launch {
+                try {
+                    api.patchProfile("Bearer $t", ProfilePatch(fcmToken = fcmToken))
+                } catch (_: Exception) { /* non-blocking */ }
             }
         }
     }
@@ -364,6 +377,7 @@ class GluciViewModel(app: Application) : AndroidViewModel(app) {
                 refreshConversations()
                 refreshUsage()
                 refreshSummaries()
+                uploadFcmToken()
             } catch (e: Exception) {
                 _error.value = when {
                     e is HttpException && e.code() == 409 ->
@@ -389,6 +403,7 @@ class GluciViewModel(app: Application) : AndroidViewModel(app) {
                 refreshConversations()
                 refreshUsage()
                 refreshSummaries()
+                uploadFcmToken()
             } catch (e: Exception) {
                 _error.value = when {
                     e is HttpException && (e.code() == 401 || e.code() == 400) ->

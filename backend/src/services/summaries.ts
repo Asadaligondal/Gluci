@@ -306,12 +306,13 @@ export async function usersEligibleForReengagement() {
   const candidates = await prisma.user.findMany({
     where: {
       reengagementOptOut: false,
-      OR: [{ telegramChatId: { not: null } }, { whatsappWaId: { not: null } }],
+      OR: [{ telegramChatId: { not: null } }, { whatsappWaId: { not: null } }, { fcmToken: { not: null } }],
     },
     select: {
       id: true,
       telegramChatId: true,
       whatsappWaId: true,
+      fcmToken: true,
       lastReengagementAt: true,
       reengagementFrequencyDays: true,
     },

@@ -4,6 +4,7 @@ import { prisma } from "../db.js";
 import { usersEligibleForReengagement } from "../services/summaries.js";
 import { sendTelegramMessage } from "../channels/telegram.js";
 import { sendWhatsAppMessage } from "../channels/whatsapp.js";
+import { sendFcmNotification } from "../services/fcm.js";
 import { logAnalytics } from "../services/analytics.js";
 
 export const internalRouter = Router();
@@ -54,6 +55,17 @@ internalRouter.get("/cron/reengage", async (req, res) => {
           userId: u.id,
           name: "reengagement_sent",
           properties: { channel: "whatsapp" },
+          source: "server",
+        });
+        sent = true;
+      }
+
+      if (u.fcmToken) {
+        await sendFcmNotification(u.fcmToken, msg);
+        void logAnalytics({
+          userId: u.id,
+          name: "reengagement_sent",
+          properties: { channel: "fcm" },
           source: "server",
         });
         sent = true;

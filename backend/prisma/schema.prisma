@@ -36,6 +36,7 @@ model User {
   appOnboardingComplete Boolean  @default(false)
   telegramOnboardingSent Boolean @default(false)
   whatsappOnboardingSent Boolean @default(false)
+  fcmToken               String?
   profile              Profile?
   messages             Message[]
   usageEvents          UsageEvent[]

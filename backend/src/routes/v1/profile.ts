@@ -28,6 +28,7 @@ const patchSchema = z.object({
   reengagementOptOut: z.boolean().optional(),
   reengagementFrequencyDays: z.number().int().min(1).max(30).optional(),
   appOnboardingComplete: z.boolean().optional(),
+  fcmToken: z.string().optional(),
 });
 
 profileRouter.patch("/", async (req: AuthedRequest, res) => {
@@ -50,12 +51,14 @@ profileRouter.patch("/", async (req: AuthedRequest, res) => {
     reengagementOptOut?: boolean;
     reengagementFrequencyDays?: number;
     appOnboardingComplete?: boolean;
+    fcmToken?: string;
   } = {};
   if (parsed.data.reengagementOptOut !== undefined) userPatch.reengagementOptOut = parsed.data.reengagementOptOut;
   if (parsed.data.reengagementFrequencyDays !== undefined)
     userPatch.reengagementFrequencyDays = parsed.data.reengagementFrequencyDays;
   if (parsed.data.appOnboardingComplete !== undefined)
     userPatch.appOnboardingComplete = parsed.data.appOnboardingComplete;
+  if (parsed.data.fcmToken !== undefined) userPatch.fcmToken = parsed.data.fcmToken;
 
   if (Object.keys(userPatch).length > 0) {
     await prisma.user.update({ where: { id: uid }, data: userPatch });

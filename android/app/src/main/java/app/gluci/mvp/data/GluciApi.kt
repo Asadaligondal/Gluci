@@ -119,6 +119,7 @@ data class ProfilePatch(
     val reengagementOptOut: Boolean? = null,
     val reengagementFrequencyDays: Int? = null,
     val appOnboardingComplete: Boolean? = null,
+    val fcmToken: String? = null,
 )
 
 /** GET /v1/profile/ */

@@ -1,9 +1,12 @@
 package app.gluci.mvp
 
+import android.Manifest
+import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.CircularProgressIndicator
@@ -33,6 +36,9 @@ import app.gluci.mvp.vm.GluciViewModel
 class MainActivity : ComponentActivity() {
     private var sessionVm: GluciViewModel? = null
 
+    private val requestNotificationPermission =
+        registerForActivityResult(ActivityResultContracts.RequestPermission()) { /* granted or denied, non-blocking */ }
+
     override fun onResume() {
         super.onResume()
         sessionVm?.refreshBilling()
@@ -43,6 +49,9 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            requestNotificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+        }
         setContent {
             val nav = rememberNavController()
             val vm: GluciViewModel = viewModel()
