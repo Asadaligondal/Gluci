@@ -9,7 +9,12 @@ const processedMsgIds = new Set<string>();
 
 const WA_ONBOARDING =
   "Welcome to Gluci — text me before you eat: meal photos, restaurant questions, or a grocery barcode number. " +
-  "Reply STOP NUDGES to mute daily check-ins, NOTIFY to turn them back on.";
+  "I'll send you a daily nudge to keep you on track.\n\n" +
+  "Commands:\nSTOP — mute nudges\nNOTIFY — daily nudges\nNUDGE LESS — every 3 days\nNUDGE DAILY — back to daily";
+
+export async function sendWhatsAppMessage(to: string, body: string) {
+  await waSendText(to, body);
+}
 
 async function waSendText(to: string, body: string) {
   const cfg = getConfig();
@@ -128,14 +133,24 @@ export async function handleWhatsAppPayload(body: Record<string, unknown>) {
   const user = await getOrCreateWhatsAppUser(from);
 
   const low = text.toLowerCase();
-  if (low === "stop nudges" || low === "/stop") {
+  if (low === "stop nudges" || low === "/stop" || low === "stop") {
     await prisma.user.update({ where: { id: user.id }, data: { reengagementOptOut: true } });
-    await waSendText(from, "Daily nudges are off. Text NOTIFY to turn them back on.");
+    await waSendText(from, "Nudges are off. Text NOTIFY to turn them back on, or NUDGE LESS for every-3-day nudges.");
     return;
   }
   if (low === "notify" || low === "notify gluci") {
-    await prisma.user.update({ where: { id: user.id }, data: { reengagementOptOut: false } });
-    await waSendText(from, "Daily nudges are on. Text STOP NUDGES to mute.");
+    await prisma.user.update({ where: { id: user.id }, data: { reengagementOptOut: false, reengagementFrequencyDays: 1 } });
+    await waSendText(from, "Daily nudges are on. Text STOP to mute or NUDGE LESS for every-3-day nudges.");
+    return;
+  }
+  if (low === "nudge less") {
+    await prisma.user.update({ where: { id: user.id }, data: { reengagementOptOut: false, reengagementFrequencyDays: 3 } });
+    await waSendText(from, "Got it — I'll nudge you every 3 days instead. Text NOTIFY for daily or STOP to mute.");
+    return;
+  }
+  if (low === "nudge daily") {
+    await prisma.user.update({ where: { id: user.id }, data: { reengagementOptOut: false, reengagementFrequencyDays: 1 } });
+    await waSendText(from, "Daily nudges are on. Text NUDGE LESS for every-3-day nudges or STOP to mute.");
     return;
   }
 

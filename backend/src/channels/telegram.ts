@@ -18,7 +18,7 @@ const ONBOARDING =
   "Welcome to Gluci — your friendly food coach *before* you eat.\n\n" +
   "Send a meal photo, ask about a restaurant or menu, or type a grocery barcode. " +
   "You get a GlucoseGal score, a clear verdict, and practical tweaks—no shame.\n\n" +
-  "Commands:\n/stop — mute daily check-in nudges\n/notify — turn nudges back on";
+  "Commands:\n/stop — mute nudges\n/notify — daily nudges\n/nudge_less — every 3 days\n/nudge_daily — back to daily";
 
 async function tgMethod(method: string, body: Record<string, unknown>) {
   const cfg = getConfig();
@@ -98,12 +98,22 @@ export async function handleTelegramUpdate(update: Record<string, unknown>) {
 
   if (/^\/stop(?:@\w+)?$/i.test(text)) {
     await prisma.user.update({ where: { id: user.id }, data: { reengagementOptOut: true } });
-    await sendTelegramMessage(chatId, "Daily nudges are off. Send /notify anytime to turn them back on.");
+    await sendTelegramMessage(chatId, "Nudges are off. Send /notify for daily nudges or /nudge_less for every-3-day nudges.");
     return;
   }
   if (/^\/notify(?:@\w+)?$/i.test(text)) {
-    await prisma.user.update({ where: { id: user.id }, data: { reengagementOptOut: false } });
-    await sendTelegramMessage(chatId, "Daily nudges are on. Send /stop to mute again.");
+    await prisma.user.update({ where: { id: user.id }, data: { reengagementOptOut: false, reengagementFrequencyDays: 1 } });
+    await sendTelegramMessage(chatId, "Daily nudges are on. Send /stop to mute or /nudge_less for every-3-day nudges.");
+    return;
+  }
+  if (/^\/nudge_less(?:@\w+)?$/i.test(text)) {
+    await prisma.user.update({ where: { id: user.id }, data: { reengagementOptOut: false, reengagementFrequencyDays: 3 } });
+    await sendTelegramMessage(chatId, "Got it — I'll nudge you every 3 days. Send /notify for daily or /stop to mute.");
+    return;
+  }
+  if (/^\/nudge_daily(?:@\w+)?$/i.test(text)) {
+    await prisma.user.update({ where: { id: user.id }, data: { reengagementOptOut: false, reengagementFrequencyDays: 1 } });
+    await sendTelegramMessage(chatId, "Daily nudges are on. Send /nudge_less for every-3-day nudges or /stop to mute.");
     return;
   }
 
@@ -117,7 +127,7 @@ export async function handleTelegramUpdate(update: Record<string, unknown>) {
         "🔍 A grocery barcode\n\n" +
         "I'll tell you the glucose impact, give you a score out of 10, and share tips to eat better.\n\n" +
         "Try it now — send me a food photo! 🍎\n\n" +
-        "Commands:\n/stop — mute daily check-in nudges\n/notify — turn nudges back on",
+        "Commands:\n/stop — mute nudges\n/notify — daily nudges\n/nudge_less — every 3 days\n/nudge_daily — back to daily",
     );
     await prisma.user.update({ where: { id: user.id }, data: { telegramOnboardingSent: true } });
     if (/^\/start(?:@\w+)?\s*$/i.test(text)) return;
