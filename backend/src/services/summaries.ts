@@ -318,27 +318,30 @@ export async function usersEligibleForReengagement() {
     take: 200,
   });
 
-  const now = Date.now();
-  const twentyFourHoursAgo = new Date(now - 24 * 60 * 60 * 1000);
+  // TESTING: all filters disabled — remove this block and uncomment below when done testing
+  return candidates.slice(0, 100);
 
-  // Exclude users who logged a food check in the last 24 hours — they're already active.
-  const recentActiveIds = new Set(
-    (
-      await prisma.usageEvent.findMany({
-        where: { userId: { in: candidates.map((u) => u.id) }, createdAt: { gte: twentyFourHoursAgo } },
-        select: { userId: true },
-        distinct: ["userId"],
-      })
-    ).map((e) => e.userId),
-  );
+  // const now = Date.now();
+  // const twentyFourHoursAgo = new Date(now - 24 * 60 * 60 * 1000);
 
-  const eligible = candidates.filter((u) => {
-    if (recentActiveIds.has(u.id)) return false;
-    const freq = Math.max(1, Math.min(30, u.reengagementFrequencyDays ?? 1));
-    const minMs = freq * 24 * 60 * 60 * 1000;
-    if (!u.lastReengagementAt) return true;
-    return now - u.lastReengagementAt.getTime() >= minMs;
-  });
+  // // Exclude users who logged a food check in the last 24 hours — they're already active.
+  // const recentActiveIds = new Set(
+  //   (
+  //     await prisma.usageEvent.findMany({
+  //       where: { userId: { in: candidates.map((u) => u.id) }, createdAt: { gte: twentyFourHoursAgo } },
+  //       select: { userId: true },
+  //       distinct: ["userId"],
+  //     })
+  //   ).map((e) => e.userId),
+  // );
 
-  return eligible.slice(0, 100);
+  // const eligible = candidates.filter((u) => {
+  //   if (recentActiveIds.has(u.id)) return false;
+  //   const freq = Math.max(1, Math.min(30, u.reengagementFrequencyDays ?? 1));
+  //   const minMs = freq * 24 * 60 * 60 * 1000;
+  //   if (!u.lastReengagementAt) return true;
+  //   return now - u.lastReengagementAt.getTime() >= minMs;
+  // });
+
+  // return eligible.slice(0, 100);
 }
