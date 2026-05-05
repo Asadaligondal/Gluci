@@ -60,6 +60,8 @@ internalRouter.get("/cron/reengage", async (req, res) => {
         sent = true;
       }
 
+      console.log(`[cron] user ${u.id} fcmToken=${u.fcmToken ? "set" : "null"} tg=${u.telegramChatId ? "set" : "null"} wa=${u.whatsappWaId ? "set" : "null"}`);
+
       if (u.fcmToken) {
         await sendFcmNotification(u.fcmToken, msg);
         void logAnalytics({
