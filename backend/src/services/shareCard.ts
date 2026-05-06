@@ -40,6 +40,13 @@ const CHART_SVG_H = 700;
 const CURVE_MAX_Y = 80;
 const CURVE_THRESHOLD = 30;
 
+function gaussY(t: number, peakMin: number, peakVal: number, riseWidth: number, fallWidth: number): number {
+  if (peakVal <= 0) return 0;
+  const sigma = t <= peakMin ? riseWidth : fallWidth;
+  const e = -(t - peakMin) * (t - peakMin) / (2 * sigma * sigma);
+  return peakVal * Math.exp(e);
+}
+
 function generateShareChartSVG(
   points: CurvePoint[],
   peak: number,
@@ -63,43 +70,53 @@ function generateShareChartSVG(
   const actualPeak = points.length ? Math.max(...points.map((p) => p.mg_dl)) : MAX_Y;
   const scaleCeiling = Math.max(actualPeak * 1.1, MAX_Y);
 
-  const pts = points.map((p) => ({
-    x: PAD_LEFT + (p.minute / 180) * innerW,
-    y: PAD_TOP + innerH - Math.min(
-      (p.mg_dl / scaleCeiling) * innerH * 0.85,
-      innerH * 0.88,
-    ),
-  }));
+  // Gaussian smoothing — same math as Android GlucoseCurveChart
+  const peakPtRaw = points.length
+    ? points.reduce((best, p) => (p.mg_dl > best.mg_dl ? p : best), points[0])
+    : { minute: 60, mg_dl: MAX_Y };
+  const peakMin = peakPtRaw.minute;
+  const peakVal = peakPtRaw.mg_dl;
+  const riseWidth = Math.max(peakMin / 2.5, 12);
+  const fallWidth = Math.max((180 - peakMin) / 2.5, 12);
+
+  const STEPS = 80;
+  const smoothPts = Array.from({ length: STEPS + 1 }, (_, i) => {
+    const t = (i / STEPS) * 180;
+    const gY = gaussY(t, peakMin, peakVal, riseWidth, fallWidth);
+    return {
+      x: PAD_LEFT + (t / 180) * innerW,
+      y: PAD_TOP + innerH - Math.min((gY / scaleCeiling) * innerH * 0.85, innerH * 0.88),
+    };
+  });
 
   let curvePath = "";
   let tickMarks = "";
   let peakDot = "";
 
-  if (pts.length >= 2) {
-    curvePath = `M ${pts[0].x.toFixed(1)} ${chartBottom} L ${pts[0].x.toFixed(1)} ${pts[0].y.toFixed(1)}`;
-    for (let i = 1; i < pts.length; i++) {
-      const prev = pts[i - 1];
-      const curr = pts[i];
-      const cp1x = prev.x + (curr.x - prev.x) * 0.5;
-      const cp2x = curr.x - (curr.x - prev.x) * 0.5;
-      curvePath += ` C ${cp1x.toFixed(1)} ${prev.y.toFixed(1)} ${cp2x.toFixed(1)} ${curr.y.toFixed(1)} ${curr.x.toFixed(1)} ${curr.y.toFixed(1)}`;
+  if (points.length >= 2) {
+    curvePath = `M ${smoothPts[0].x.toFixed(1)} ${chartBottom} L ${smoothPts[0].x.toFixed(1)} ${smoothPts[0].y.toFixed(1)}`;
+    for (let i = 1; i < smoothPts.length; i++) {
+      const prev = smoothPts[i - 1];
+      const curr = smoothPts[i];
+      const cpx = (prev.x + curr.x) / 2;
+      curvePath += ` C ${cpx.toFixed(1)} ${prev.y.toFixed(1)} ${cpx.toFixed(1)} ${curr.y.toFixed(1)} ${curr.x.toFixed(1)} ${curr.y.toFixed(1)}`;
     }
-    curvePath += ` L ${pts[pts.length - 1].x.toFixed(1)} ${chartBottom} Z`;
+    curvePath += ` L ${smoothPts[smoothPts.length - 1].x.toFixed(1)} ${chartBottom} Z`;
 
-    const peakIdx = points.reduce((best, p, i) => (p.mg_dl > points[best].mg_dl ? i : best), 0);
-    const peakPt = pts[Math.min(peakIdx, pts.length - 1)];
+    const peakX = PAD_LEFT + (peakMin / 180) * innerW;
+    const peakY = PAD_TOP + innerH - Math.min((peakVal / scaleCeiling) * innerH * 0.85, innerH * 0.88);
     const tickLen = 20;
     const tickAngles = [-150, -120, -90, -60, -30];
     tickMarks = tickAngles
       .map((deg) => {
         const rad = (deg * Math.PI) / 180;
-        const ex = (peakPt.x + Math.cos(rad) * tickLen).toFixed(1);
-        const ey = (peakPt.y + Math.sin(rad) * tickLen).toFixed(1);
-        return `<line x1="${peakPt.x.toFixed(1)}" y1="${peakPt.y.toFixed(1)}" x2="${ex}" y2="${ey}" stroke="#333333" stroke-width="2.5" stroke-linecap="round"/>`;
+        const ex = (peakX + Math.cos(rad) * tickLen).toFixed(1);
+        const ey = (peakY + Math.sin(rad) * tickLen).toFixed(1);
+        return `<line x1="${peakX.toFixed(1)}" y1="${peakY.toFixed(1)}" x2="${ex}" y2="${ey}" stroke="#333333" stroke-width="2.5" stroke-linecap="round"/>`;
       })
       .join("\n    ");
-    peakDot = `<circle cx="${peakPt.x.toFixed(1)}" cy="${peakPt.y.toFixed(1)}" r="9" fill="white"/>
-    <circle cx="${peakPt.x.toFixed(1)}" cy="${peakPt.y.toFixed(1)}" r="5" fill="#333333"/>`;
+    peakDot = `<circle cx="${peakX.toFixed(1)}" cy="${peakY.toFixed(1)}" r="9" fill="white"/>
+    <circle cx="${peakX.toFixed(1)}" cy="${peakY.toFixed(1)}" r="5" fill="#333333"/>`;
   }
 
   const titleText = escapeXml(foodName.trim().slice(0, 40) || "Your meal");
@@ -356,6 +373,7 @@ export async function renderShareCard(params: {
   const footer = escapeXml(params.subtitle ?? "gluci.app");
   const footerSVG = `<svg width="${W}" height="170" xmlns="http://www.w3.org/2000/svg">
   <text x="${W / 2}" y="60" font-family="Georgia, 'Times New Roman', serif" font-size="28" fill="#9E9E9E" text-anchor="middle">${footer}</text>
+  <text x="${W - 60}" y="130" font-family="Georgia, 'Times New Roman', serif" font-weight="bold" font-size="38" fill="#E91E8C" fill-opacity="0.40" text-anchor="end">gluci</text>
 </svg>`;
   const footerBuf = await sharp(Buffer.from(footerSVG)).png().toBuffer();
   composites.push({ input: footerBuf, left: 0, top: 1180 });

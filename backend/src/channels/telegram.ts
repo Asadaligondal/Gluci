@@ -236,7 +236,10 @@ export async function handleTelegramUpdate(update: Record<string, unknown>) {
     channel: "telegram",
   });
 
-  await sendTelegramMessage(chatId, out.reply);
+  const ctaSuffix = out.shareCardUrl
+    ? "\n\n📊 Sending your glucose card below — share it with friends!"
+    : "";
+  await sendTelegramMessage(chatId, out.reply + ctaSuffix);
 
   if (out.shareCardUrl) {
     const cfg = getConfig();
@@ -246,6 +249,12 @@ export async function handleTelegramUpdate(update: Record<string, unknown>) {
     const scoreLabel = out.structured.glucoseGalScore != null ? `Score: ${out.structured.glucoseGalScore}/10` : "";
     const verdictLabel = out.structured.verdict ? ` | ${out.structured.verdict.toUpperCase()}` : "";
     await sendTelegramPhoto(chatId, cardUrl, `${scoreLabel}${verdictLabel}`.trim() || "Your Gluci result");
+    if (out.shareLandingUrl) {
+      await sendTelegramMessage(
+        chatId,
+        `🔗 Invite a friend to Gluci:\n${out.shareLandingUrl}\n\nThey'll get their first food check free!`,
+      );
+    }
   }
 
   const mealCount = await prisma.usageEvent.count({ where: { userId: user.id } });

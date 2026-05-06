@@ -43,6 +43,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Spa
 import androidx.compose.material.icons.outlined.DoneAll
 import androidx.compose.material.icons.outlined.MoreVert
@@ -606,6 +607,36 @@ private fun ChatMessageBubble(
                     .padding(top = 8.dp),
                 ragAdjusted = m.ragAdjusted,
             )
+            if (!m.shareCardUrl.isNullOrBlank()) {
+                Surface(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 6.dp)
+                        .clickable { shareGluciCard(m) },
+                    color = Color(0xFFE91E8C).copy(alpha = 0.09f),
+                    shape = RoundedCornerShape(10.dp),
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Center,
+                    ) {
+                        Icon(
+                            Icons.Default.Share,
+                            contentDescription = null,
+                            tint = Color(0xFFE91E8C),
+                            modifier = Modifier.size(16.dp),
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            "Share your Gluci result",
+                            style = MaterialTheme.typography.labelLarge,
+                            color = Color(0xFFE91E8C),
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                    }
+                }
+            }
         } else if (!isUser && m.score != null &&
                    m.glucoseCurve.isNullOrEmpty() &&
                    m.topOrders.isNullOrEmpty() &&

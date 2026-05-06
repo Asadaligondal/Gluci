@@ -250,7 +250,10 @@ export async function handleWhatsAppPayload(body: Record<string, unknown>) {
     channel: "whatsapp",
   });
 
-  await waSendText(from, out.reply);
+  const ctaSuffix = out.shareCardUrl
+    ? "\n\n📊 Sending your glucose card below — share it with friends!"
+    : "";
+  await waSendText(from, out.reply + ctaSuffix);
 
   if (out.shareCardUrl) {
     const cfg = getConfig();
@@ -260,5 +263,11 @@ export async function handleWhatsAppPayload(body: Record<string, unknown>) {
     const scoreLabel = out.structured.glucoseGalScore != null ? `Score: ${out.structured.glucoseGalScore}/10` : "";
     const verdictLabel = out.structured.verdict ? ` | ${out.structured.verdict.toUpperCase()}` : "";
     await waSendImage(from, cardUrl, `${scoreLabel}${verdictLabel}`.trim() || "Your Gluci result");
+    if (out.shareLandingUrl) {
+      await waSendText(
+        from,
+        `🔗 Invite a friend to Gluci:\n${out.shareLandingUrl}\n\nThey'll get their first food check free!`,
+      );
+    }
   }
 }
