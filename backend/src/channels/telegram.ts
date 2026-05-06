@@ -4,6 +4,7 @@ import { getOrCreateTelegramUser } from "../services/users.js";
 import { handleChatTurn } from "../services/orchestrator.js";
 import { getOrCreateChannelConversation } from "../services/conversationService.js";
 import { tryLinkTelegramByCode } from "../services/linking.js";
+import { getPendingSetup, setPendingSetup, saveGoal, saveDietaryField } from "../services/profileService.js";
 
 const TG_API = "https://api.telegram.org";
 
@@ -14,11 +15,19 @@ function isImageDocument(doc: { file_id?: string; mime_type?: string; file_name?
   return /\.(jpe?g|png|gif|webp|heic|heif|bmp)$/.test(n);
 }
 
-const ONBOARDING =
-  "Welcome to Gluci — your friendly food coach *before* you eat.\n\n" +
-  "Send a meal photo, ask about a restaurant or menu, or type a grocery barcode. " +
-  "You get a GlucoseGal score, a clear verdict, and practical tweaks—no shame.\n\n" +
-  "Commands:\n/stop — mute nudges\n/notify — daily nudges\n/nudge_less — every 3 days\n/nudge_daily — back to daily";
+const TG_COMMANDS =
+  "Commands you can use anytime:\n" +
+  "/setgoal — update your health goal\n" +
+  "/setallergies — update allergies or foods to avoid\n" +
+  "/setdiet — update dietary preferences\n" +
+  "/stop — mute nudges\n" +
+  "/notify — resume daily nudges\n" +
+  "/nudge_less — nudge every 3 days\n" +
+  "/nudge_daily — back to daily nudges";
+
+const Q_GOAL = "What's your main health goal? (e.g. lose weight, manage blood sugar, eat healthier, build muscle)\nReply with your goal or type 'skip'.";
+const Q_ALLERGIES = "Any allergies or foods to avoid? (e.g. gluten, dairy, nuts, shellfish)\nReply or type 'skip'.";
+const Q_DIET = "Any dietary preferences? (e.g. vegetarian, vegan, low carb, halal, keto)\nReply or type 'skip'.";
 
 async function tgMethod(method: string, body: Record<string, unknown>) {
   const cfg = getConfig();
@@ -117,29 +126,40 @@ export async function handleTelegramUpdate(update: Record<string, unknown>) {
     return;
   }
 
+  // Personalization commands — work anytime
+  if (/^\/setgoal(?:@\w+)?$/i.test(text)) {
+    await setPendingSetup(user.id, "goal");
+    await sendTelegramMessage(chatId, Q_GOAL);
+    return;
+  }
+  if (/^\/setallergies(?:@\w+)?$/i.test(text)) {
+    await setPendingSetup(user.id, "allergies");
+    await sendTelegramMessage(chatId, Q_ALLERGIES);
+    return;
+  }
+  if (/^\/setdiet(?:@\w+)?$/i.test(text)) {
+    await setPendingSetup(user.id, "diet");
+    await sendTelegramMessage(chatId, Q_DIET);
+    return;
+  }
+
+  // New user: start onboarding Q&A
   if (isNew) {
     await sendTelegramMessage(
       chatId,
-      `👋 Welcome to Gluci, ${firstName}!\n\n` +
-        "I'm your personal glucose coach. Send me:\n" +
-        "📸 A photo of your food\n" +
-        "📝 A description of what you ate\n" +
-        "🔍 A grocery barcode\n\n" +
-        "I'll tell you the glucose impact, give you a score out of 10, and share tips to eat better.\n\n" +
-        "Try it now — send me a food photo! 🍎\n\n" +
-        "Commands:\n/stop — mute nudges\n/notify — daily nudges\n/nudge_less — every 3 days\n/nudge_daily — back to daily",
+      `👋 Welcome to Gluci, ${firstName}!\n\nI'm your personal glucose coach — I'll score your meals, flag glucose spikes, and suggest smarter choices.\n\nFirst, let me personalise your experience.\n\n${Q_GOAL}`,
     );
+    await setPendingSetup(user.id, "goal");
     await prisma.user.update({ where: { id: user.id }, data: { telegramOnboardingSent: true } });
-    if (/^\/start(?:@\w+)?\s*$/i.test(text)) return;
-  } else if (
+    return;
+  }
+
+  if (
     /^\/start(?:@\w+)?\s*$/i.test(text) &&
     !(msg.photo as unknown[])?.length &&
     !isImageDocument(msg.document as { file_id?: string; mime_type?: string; file_name?: string } | undefined)
   ) {
-    await sendTelegramMessage(chatId, user.telegramOnboardingSent ? "Send a food photo or question anytime." : ONBOARDING);
-    if (!user.telegramOnboardingSent) {
-      await prisma.user.update({ where: { id: user.id }, data: { telegramOnboardingSent: true } });
-    }
+    await sendTelegramMessage(chatId, "Send a food photo, restaurant question, or grocery barcode anytime.\n\n" + TG_COMMANDS);
     return;
   }
 
@@ -168,11 +188,6 @@ export async function handleTelegramUpdate(update: Record<string, unknown>) {
   const m = text.match(/\b(\d{8,14})\b/);
   if (m) barcode = m[1];
 
-  if (!isNew && !user.telegramOnboardingSent && (text || imageBase64)) {
-    await prisma.user.update({ where: { id: user.id }, data: { telegramOnboardingSent: true } });
-    await sendTelegramMessage(chatId, ONBOARDING);
-  }
-
   const hadImagePayload = Boolean(photos?.length) || isImageDocument(document);
   if (hadImagePayload && !imageBase64) {
     await sendTelegramMessage(
@@ -182,6 +197,33 @@ export async function handleTelegramUpdate(update: Record<string, unknown>) {
     return;
   }
   if (!text && !imageBase64) return;
+
+  // Handle pending personalization setup step
+  const pending = await getPendingSetup(user.id);
+  if (pending) {
+    const answer = text.trim().toLowerCase() === "skip" ? "" : text.trim();
+    if (pending === "goal") {
+      if (answer) await saveGoal(user.id, answer);
+      await setPendingSetup(user.id, "allergies");
+      await sendTelegramMessage(chatId, Q_ALLERGIES);
+      return;
+    }
+    if (pending === "allergies") {
+      if (answer) await saveDietaryField(user.id, "allergies", answer);
+      await setPendingSetup(user.id, "diet");
+      await sendTelegramMessage(chatId, Q_DIET);
+      return;
+    }
+    if (pending === "diet") {
+      if (answer) await saveDietaryField(user.id, "preferences", answer);
+      await setPendingSetup(user.id, null);
+      await sendTelegramMessage(
+        chatId,
+        "✅ All set! I'll personalise every response to your profile.\n\nSend me a food photo, restaurant question, or grocery barcode to get started.\n\n" + TG_COMMANDS,
+      );
+      return;
+    }
+  }
 
   const thread = await getOrCreateChannelConversation(user.id, "telegram");
   const out = await handleChatTurn({

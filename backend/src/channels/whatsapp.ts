@@ -4,13 +4,23 @@ import { getOrCreateWhatsAppUser } from "../services/users.js";
 import { handleChatTurn } from "../services/orchestrator.js";
 import { getOrCreateChannelConversation } from "../services/conversationService.js";
 import { tryLinkWhatsAppByCode } from "../services/linking.js";
+import { getPendingSetup, setPendingSetup, saveGoal, saveDietaryField } from "../services/profileService.js";
 
 const processedMsgIds = new Set<string>();
 
-const WA_ONBOARDING =
-  "Welcome to Gluci — text me before you eat: meal photos, restaurant questions, or a grocery barcode number. " +
-  "I'll send you a daily nudge to keep you on track.\n\n" +
-  "Commands:\nSTOP — mute nudges\nNOTIFY — daily nudges\nNUDGE LESS — every 3 days\nNUDGE DAILY — back to daily";
+const WA_COMMANDS =
+  "Commands you can use anytime:\n" +
+  "SET GOAL — update your health goal\n" +
+  "SET ALLERGIES — update allergies or foods to avoid\n" +
+  "SET DIET — update dietary preferences\n" +
+  "STOP — mute nudges\n" +
+  "NOTIFY — resume daily nudges\n" +
+  "NUDGE LESS — nudge every 3 days\n" +
+  "NUDGE DAILY — back to daily nudges";
+
+const Q_GOAL = "What's your main health goal? (e.g. lose weight, manage blood sugar, eat healthier, build muscle)\nReply with your goal or text SKIP.";
+const Q_ALLERGIES = "Any allergies or foods to avoid? (e.g. gluten, dairy, nuts, shellfish)\nReply or text SKIP.";
+const Q_DIET = "Any dietary preferences? (e.g. vegetarian, vegan, low carb, halal, keto)\nReply or text SKIP.";
 
 export async function sendWhatsAppMessage(to: string, body: string) {
   await waSendText(to, body);
@@ -154,6 +164,23 @@ export async function handleWhatsAppPayload(body: Record<string, unknown>) {
     return;
   }
 
+  // Personalization commands — work anytime
+  if (low === "set goal") {
+    await setPendingSetup(user.id, "goal");
+    await waSendText(from, Q_GOAL);
+    return;
+  }
+  if (low === "set allergies") {
+    await setPendingSetup(user.id, "allergies");
+    await waSendText(from, Q_ALLERGIES);
+    return;
+  }
+  if (low === "set diet") {
+    await setPendingSetup(user.id, "diet");
+    await waSendText(from, Q_DIET);
+    return;
+  }
+
   let imageBase64: string | undefined;
   let mimeType: string | undefined;
   if (msg.type === "image" && msg.image && typeof (msg.image as { id?: string }).id === "string") {
@@ -169,14 +196,47 @@ export async function handleWhatsAppPayload(body: Record<string, unknown>) {
   const m = text.match(/\b(\d{8,14})\b/);
   if (m) barcode = m[1];
 
-  if (!user.whatsappOnboardingSent && (text || imageBase64)) {
+  // New user: start onboarding Q&A
+  if (!user.whatsappOnboardingSent) {
     await prisma.user.update({ where: { id: user.id }, data: { whatsappOnboardingSent: true } });
-    await waSendText(from, WA_ONBOARDING);
+    await waSendText(
+      from,
+      "👋 Welcome to Gluci! I'm your personal glucose coach — I'll score your meals, flag glucose spikes, and suggest smarter choices.\n\nFirst, let me personalise your experience.\n\n" + Q_GOAL,
+    );
+    await setPendingSetup(user.id, "goal");
+    return;
   }
 
   if (!text && !imageBase64) {
     await waSendText(from, "Send a food photo, restaurant question, or grocery barcode number.");
     return;
+  }
+
+  // Handle pending personalization setup step
+  const pending = await getPendingSetup(user.id);
+  if (pending) {
+    const answer = text.trim().toLowerCase() === "skip" ? "" : text.trim();
+    if (pending === "goal") {
+      if (answer) await saveGoal(user.id, answer);
+      await setPendingSetup(user.id, "allergies");
+      await waSendText(from, Q_ALLERGIES);
+      return;
+    }
+    if (pending === "allergies") {
+      if (answer) await saveDietaryField(user.id, "allergies", answer);
+      await setPendingSetup(user.id, "diet");
+      await waSendText(from, Q_DIET);
+      return;
+    }
+    if (pending === "diet") {
+      if (answer) await saveDietaryField(user.id, "preferences", answer);
+      await setPendingSetup(user.id, null);
+      await waSendText(
+        from,
+        "✅ All set! I'll personalise every response to your profile.\n\nSend me a food photo, restaurant question, or grocery barcode to get started.\n\n" + WA_COMMANDS,
+      );
+      return;
+    }
   }
 
   const thread = await getOrCreateChannelConversation(user.id, "whatsapp");
