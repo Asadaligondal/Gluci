@@ -38,7 +38,7 @@ const CURVE_THRESHOLD = 30;
 function gaussY(t: number, peakMin: number, peakVal: number, riseWidth: number, fallWidth: number): number {
   if (peakVal <= 0) return 0;
   const sigma = t <= peakMin ? riseWidth : fallWidth;
-  return peakVal * Math.exp(-(t - peakMin) ** 2 / (2 * sigma * sigma));
+  return peakVal * Math.exp(-((t - peakMin) * (t - peakMin)) / (2 * sigma * sigma));
 }
 
 function escapeXml(s: string): string {
