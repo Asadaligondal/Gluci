@@ -23,6 +23,7 @@ export type GluciResponse = {
   mealGI?: number;
   mealGL?: number;
   confidence?: "high" | "medium" | "low";
+  calories?: number;
 };
 
 export type FoodExtraction =
@@ -160,6 +161,7 @@ When analyzing food (meal intent or photo/text meal questions), ALWAYS return JS
     {"minute": 120, "mg_dl": <number>}
   ],
   "tip": "<one actionable sentence>",
+  "calories": <estimated total kcal as integer>,
   "message": "<friendly conversational response to user>",
   "intent": "meal",
   "countAsDecision": true|false,
@@ -263,6 +265,7 @@ export function normalizeGluciResponse(raw: unknown): GluciResponse {
   const mealGL = typeof o.mealGL === "number" ? o.mealGL : undefined;
   const confidence =
     o.confidence === "high" || o.confidence === "medium" || o.confidence === "low" ? o.confidence : undefined;
+  const calories = typeof o.calories === "number" && o.calories > 0 ? Math.round(o.calories) : undefined;
 
   return {
     userReply: combinedMessage,
@@ -277,6 +280,7 @@ export function normalizeGluciResponse(raw: unknown): GluciResponse {
     mealGI,
     mealGL,
     confidence,
+    calories,
   };
 }
 

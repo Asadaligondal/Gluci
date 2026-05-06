@@ -34,6 +34,7 @@ historyRouter.get("/", async (req: AuthedRequest, res) => {
       let confidence: string | null = null;
       let topOrders: unknown = null;
       let ragAdjusted: boolean | null = null;
+      let calories: number | null = null;
       if (m.metadata) {
         try {
           const meta = JSON.parse(m.metadata) as {
@@ -50,6 +51,7 @@ historyRouter.get("/", async (req: AuthedRequest, res) => {
             confidence?: string | null;
             topOrders?: unknown;
             ragAdjusted?: boolean | null;
+            calories?: number | null;
           };
           if (typeof meta.score === "number") score = meta.score;
           if (typeof meta.verdict === "string") verdict = meta.verdict;
@@ -64,6 +66,7 @@ historyRouter.get("/", async (req: AuthedRequest, res) => {
           if (typeof meta.confidence === "string" && meta.confidence.trim()) confidence = meta.confidence;
           if (Array.isArray(meta.topOrders)) topOrders = meta.topOrders;
           if (typeof meta.ragAdjusted === "boolean") ragAdjusted = meta.ragAdjusted;
+          if (typeof meta.calories === "number") calories = meta.calories;
         } catch {
           /* ignore malformed metadata */
         }
@@ -93,6 +96,7 @@ historyRouter.get("/", async (req: AuthedRequest, res) => {
         confidence,
         topOrders,
         ragAdjusted,
+        calories,
       };
     }),
   });

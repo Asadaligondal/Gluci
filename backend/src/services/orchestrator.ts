@@ -544,6 +544,7 @@ export async function handleChatTurn(params: {
         ...(structured.topOrders?.length ? { topOrders: structured.topOrders } : {}),
         ...(structured.ragAdjusted !== undefined ? { ragAdjusted: structured.ragAdjusted } : {}),
         ...(shareLandingUrl ? { shareLandingUrl } : {}),
+        ...(structured.calories !== undefined ? { calories: structured.calories } : {}),
       }),
     },
   });
