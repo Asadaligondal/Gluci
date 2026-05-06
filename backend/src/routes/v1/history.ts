@@ -25,12 +25,15 @@ historyRouter.get("/", async (req: AuthedRequest, res) => {
       let verdict: string | null = null;
       let intent: string | null = null;
       let shareCardUrl: string | null = null;
+      let shareLandingUrl: string | null = null;
       let tip: string | null = null;
       let glucoseCurve: unknown = null;
       let food: string | null = null;
       let mealGI: number | null = null;
       let mealGL: number | null = null;
       let confidence: string | null = null;
+      let topOrders: unknown = null;
+      let ragAdjusted: boolean | null = null;
       if (m.metadata) {
         try {
           const meta = JSON.parse(m.metadata) as {
@@ -38,23 +41,29 @@ historyRouter.get("/", async (req: AuthedRequest, res) => {
             verdict?: string | null;
             intent?: string | null;
             shareCardUrl?: string | null;
+            shareLandingUrl?: string | null;
             tip?: string | null;
             glucoseCurve?: unknown;
             food?: string | null;
             mealGI?: number | null;
             mealGL?: number | null;
             confidence?: string | null;
+            topOrders?: unknown;
+            ragAdjusted?: boolean | null;
           };
           if (typeof meta.score === "number") score = meta.score;
           if (typeof meta.verdict === "string") verdict = meta.verdict;
           if (typeof meta.intent === "string") intent = meta.intent;
           if (typeof meta.shareCardUrl === "string") shareCardUrl = meta.shareCardUrl;
+          if (typeof meta.shareLandingUrl === "string") shareLandingUrl = meta.shareLandingUrl;
           if (typeof meta.tip === "string") tip = meta.tip;
           if (Array.isArray(meta.glucoseCurve)) glucoseCurve = meta.glucoseCurve;
           if (typeof meta.food === "string" && meta.food.trim()) food = meta.food;
           if (typeof meta.mealGI === "number") mealGI = meta.mealGI;
           if (typeof meta.mealGL === "number") mealGL = meta.mealGL;
           if (typeof meta.confidence === "string" && meta.confidence.trim()) confidence = meta.confidence;
+          if (Array.isArray(meta.topOrders)) topOrders = meta.topOrders;
+          if (typeof meta.ragAdjusted === "boolean") ragAdjusted = meta.ragAdjusted;
         } catch {
           /* ignore malformed metadata */
         }
@@ -75,12 +84,15 @@ historyRouter.get("/", async (req: AuthedRequest, res) => {
         verdict,
         intent,
         shareCardUrl,
+        shareLandingUrl,
         tip,
         glucoseCurve,
         food,
         mealGI,
         mealGL,
         confidence,
+        topOrders,
+        ragAdjusted,
       };
     }),
   });

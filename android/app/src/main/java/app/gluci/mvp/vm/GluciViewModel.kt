@@ -19,6 +19,7 @@ import app.gluci.mvp.data.ProfileResponse
 import app.gluci.mvp.data.TokenStore
 import app.gluci.mvp.data.WeeklySummaryDto
 import app.gluci.mvp.data.GluciCurvePoint
+import app.gluci.mvp.data.TopOrder
 import app.gluci.mvp.data.WeekDailyBarDto
 import app.gluci.mvp.data.parseGlucoseCurve
 import androidx.compose.ui.graphics.Color
@@ -58,6 +59,7 @@ data class UiMessage(
     /** Backend hybrid scorer: show gentle "estimated" UX when low. */
     val confidence: String? = null,
     val ragAdjusted: Boolean? = null,
+    val topOrders: List<TopOrder>? = null,
 )
 
 data class LastFoodInsight(
@@ -508,11 +510,14 @@ class GluciViewModel(app: Application) : AndroidViewModel(app) {
                                 verdict = it.verdict,
                                 intent = it.intent,
                                 shareCardUrl = it.shareCardUrl,
+                                shareLandingUrl = it.shareLandingUrl,
                                 glucoseCurve = it.glucoseCurve.parseGlucoseCurve(),
                                 tip = it.tip,
                                 food = it.food,
                                 mealImageUrl = pendingMealImage,
                                 confidence = it.confidence,
+                                ragAdjusted = it.ragAdjusted,
+                                topOrders = it.topOrders,
                                 createdAtMs = null,
                             ),
                         )
@@ -565,6 +570,7 @@ class GluciViewModel(app: Application) : AndroidViewModel(app) {
                     mealImageUrl = null,
                     confidence = out.confidence,
                     ragAdjusted = out.ragAdjusted,
+                    topOrders = out.topOrders,
                 )
                 handlePaywall(out.paywall?.checkoutUrl)
                 refreshConversations()
@@ -626,6 +632,7 @@ class GluciViewModel(app: Application) : AndroidViewModel(app) {
                     mealImageUrl = out.userImageUrl,
                     confidence = out.confidence,
                     ragAdjusted = out.ragAdjusted,
+                    topOrders = out.topOrders,
                 )
                 handlePaywall(out.paywall?.checkoutUrl)
                 refreshConversations()
@@ -671,9 +678,10 @@ class GluciViewModel(app: Application) : AndroidViewModel(app) {
                     glucoseCurve = out.glucoseCurve,
                     tip = out.tip,
                     food = out.food,
-                    mealImageUrl = out.userImageUrl, // OFF product image for barcode scans
+                    mealImageUrl = out.userImageUrl,
                     confidence = out.confidence,
                     ragAdjusted = out.ragAdjusted,
+                    topOrders = out.topOrders,
                 )
                 handlePaywall(out.paywall?.checkoutUrl)
                 refreshConversations()
@@ -754,6 +762,7 @@ class GluciViewModel(app: Application) : AndroidViewModel(app) {
         mealImageUrl: String? = null,
         confidence: String? = null,
         ragAdjusted: Boolean? = null,
+        topOrders: List<TopOrder>? = null,
     ) {
         val now = System.currentTimeMillis()
         val cur = _messages.value.toMutableList()
@@ -781,6 +790,7 @@ class GluciViewModel(app: Application) : AndroidViewModel(app) {
                 mealImageUrl = mealImageUrl,
                 confidence = confidence,
                 ragAdjusted = ragAdjusted,
+                topOrders = topOrders,
                 createdAtMs = now,
             ),
         )
@@ -801,6 +811,7 @@ class GluciViewModel(app: Application) : AndroidViewModel(app) {
         mealImageUrl: String? = null,
         confidence: String? = null,
         ragAdjusted: Boolean? = null,
+        topOrders: List<TopOrder>? = null,
     ) {
         val now = System.currentTimeMillis()
         _lastFoodInsight.value = LastFoodInsight(glucoseCurve, score?.toFloat(), verdict, tip)
@@ -818,6 +829,7 @@ class GluciViewModel(app: Application) : AndroidViewModel(app) {
             mealImageUrl = mealImageUrl,
             confidence = confidence,
             ragAdjusted = ragAdjusted,
+            topOrders = topOrders,
             createdAtMs = now,
         )
     }

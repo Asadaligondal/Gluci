@@ -82,6 +82,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
+import app.gluci.mvp.data.TopOrder
 import app.gluci.mvp.ui.components.FoodResultCard
 import app.gluci.mvp.vm.GluciViewModel
 import app.gluci.mvp.vm.OutgoingStatus
@@ -112,7 +113,7 @@ fun ChatScreen(
     val err by vm.error.collectAsState()
     var input by remember { mutableStateOf("") }
     val listState = rememberLazyListState()
-    var sharedCard by remember { mutableStateOf<Triple<String, String, String?>?>(null) }
+    var sharedCard by remember { mutableStateOf<UiMessage?>(null) }
     var pendingImageUri by remember { mutableStateOf<Uri?>(null) }
     val ctx = LocalContext.current
 
@@ -204,24 +205,14 @@ fun ChatScreen(
                 ) { i ->
                     ChatMessageBubble(
                         m = messages[i],
-                        onShareCardClick = { url, landing ->
-                            val msg = messages[i]
-                            val score = msg.score?.let { String.format("%.1f/10", it) }
-                            val verdict = msg.verdict?.takeIf { it.isNotBlank() }
-                            val caption = buildString {
-                                append("My Gluci food check")
-                                if (verdict != null) append(" — $verdict")
-                                if (score != null) append(" ($score)")
-                            }
-                            sharedCard = Triple(url, caption, landing)
-                        },
-                        shareGluciCard = { url, caption, landing ->
-                            landing?.let { land ->
+                        onShareCardClick = { _, _ -> sharedCard = messages[i] },
+                        shareGluciCard = { msg ->
+                            msg.shareLandingUrl?.let { land ->
                                 val cm = ctx.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                                 cm.setPrimaryClip(ClipData.newPlainText("Gluci invite", land))
                                 Toast.makeText(ctx, "Invite link copied", Toast.LENGTH_SHORT).show()
                             }
-                            sharedCard = Triple(url, caption, landing)
+                            sharedCard = msg
                         },
                     )
                 }
@@ -298,11 +289,25 @@ fun ChatScreen(
             }
             }
         }
-        sharedCard?.let { (url, caption, landing) ->
+        sharedCard?.let { msg ->
+            val url = msg.shareCardUrl ?: return@let
+            val scoreStr = msg.score?.let { String.format("%.1f/10", it) }
+            val verdictStr = msg.verdict?.takeIf { it.isNotBlank() }
+            val caption = buildString {
+                append("My Gluci food check")
+                if (verdictStr != null) append(" — $verdictStr")
+                if (scoreStr != null) append(" ($scoreStr)")
+            }
             ShareCardSheet(
                 url = url,
                 captionText = caption,
-                shareLandingUrl = landing,
+                shareLandingUrl = msg.shareLandingUrl,
+                score = msg.score,
+                verdict = msg.verdict,
+                curvePoints = msg.glucoseCurve,
+                tip = msg.tip,
+                foodName = msg.food,
+                foodImageUrl = msg.mealImageUrl,
                 onDismiss = { sharedCard = null },
                 onCopyInviteLink = {
                     vm.logAnalyticsEvent("share_link_copy", emptyMap())
@@ -476,7 +481,7 @@ private fun TypingIndicatorBubble() {
 private fun ChatMessageBubble(
     m: UiMessage,
     onShareCardClick: (String, String?) -> Unit = { _, _ -> },
-    shareGluciCard: (String, String, String?) -> Unit = { _, _, _ -> },
+    shareGluciCard: (UiMessage) -> Unit = {},
 ) {
     val isUser = m.role == "user"
     val time = GluciViewModel.formatMessageTime(m.createdAtMs)
@@ -594,12 +599,7 @@ private fun ChatMessageBubble(
                 foodImageUrl = m.mealImageUrl,
                 curvePoints = m.glucoseCurve!!,
                 shareCardUrl = m.shareCardUrl,
-                onShare = {
-                    val url = m.shareCardUrl ?: return@FoodResultCard
-                    val caption =
-                        "My glucose score for this meal: ${String.format("%.1f", m.score ?: 0.0)}/10 via @gluciapp #glucosegoddess #bloodsugar"
-                    shareGluciCard(url, caption, m.shareLandingUrl)
-                },
+                onShare = { shareGluciCard(m) },
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(top = 8.dp),
@@ -616,6 +616,14 @@ private fun ChatMessageBubble(
                 score = m.score.toFloat(),
                 verdict = m.verdict,
                 tip = m.tip.orEmpty(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 8.dp),
+            )
+        }
+        if (!isUser && !m.topOrders.isNullOrEmpty()) {
+            TopOrdersCard(
+                orders = m.topOrders,
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(top = 8.dp),
@@ -911,6 +919,76 @@ private fun SimpleScoreCard(
                         fontSize = 13.sp,
                         color = Color(0xFF444444),
                     )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun TopOrdersCard(
+    orders: List<TopOrder>,
+    modifier: Modifier = Modifier,
+) {
+    Surface(
+        modifier = modifier,
+        color = Color.White,
+        shadowElevation = 2.dp,
+        shape = RoundedCornerShape(12.dp),
+    ) {
+        Column(Modifier.padding(16.dp)) {
+            Text(
+                "Top picks for you",
+                style = MaterialTheme.typography.labelLarge,
+                color = SageMuted,
+                modifier = Modifier.padding(bottom = 12.dp),
+            )
+            orders.forEachIndexed { i, order ->
+                if (i > 0) Spacer(Modifier.height(10.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.Top,
+                ) {
+                    Text(
+                        "${i + 1}.",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.width(20.dp),
+                    )
+                    Column(Modifier.weight(1f)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(
+                                order.name,
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onSurface,
+                                modifier = Modifier.weight(1f),
+                            )
+                            Text(
+                                "${order.score.toInt()}/10",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = when {
+                                    order.score >= 7 -> Color(0xFF2E7D32)
+                                    order.score >= 4.5 -> Color(0xFFE65100)
+                                    else -> Color(0xFFC62828)
+                                },
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(start = 8.dp),
+                            )
+                        }
+                        if (order.tweaks.isNotBlank()) {
+                            Text(
+                                order.tweaks,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MutedCaption,
+                                modifier = Modifier.padding(top = 2.dp),
+                            )
+                        }
+                    }
                 }
             }
         }

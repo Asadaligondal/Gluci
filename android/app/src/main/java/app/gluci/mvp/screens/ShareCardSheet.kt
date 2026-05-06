@@ -18,7 +18,11 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
+import app.gluci.mvp.data.GluciCurvePoint
+import app.gluci.mvp.ui.components.FoodResultCard
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.Button
@@ -113,6 +117,12 @@ fun ShareCardSheet(
     url: String,
     captionText: String,
     shareLandingUrl: String? = null,
+    score: Double? = null,
+    verdict: String? = null,
+    curvePoints: List<GluciCurvePoint>? = null,
+    tip: String? = null,
+    foodName: String? = null,
+    foodImageUrl: String? = null,
     onDismiss: () -> Unit,
     onCopyInviteLink: () -> Unit = {},
 ) {
@@ -130,6 +140,7 @@ fun ShareCardSheet(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
                 .padding(horizontal = 20.dp)
                 .padding(bottom = 24.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
@@ -141,23 +152,37 @@ fun ShareCardSheet(
                 fontWeight = FontWeight.SemiBold,
                 modifier = Modifier.padding(bottom = 12.dp),
             )
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .aspectRatio(9f / 16f)
-                    .clip(RoundedCornerShape(18.dp))
-                    .background(Color(0xFFE8E0D0)),
-                contentAlignment = Alignment.Center,
-            ) {
-                AsyncImage(
-                    model = resolvedUrl,
-                    contentDescription = "Gluci share card",
-                    contentScale = ContentScale.Fit,
+            if (!curvePoints.isNullOrEmpty()) {
+                FoodResultCard(
+                    score = (score ?: 0.0).toFloat(),
+                    verdict = verdict ?: "",
+                    tip = tip.orEmpty(),
+                    foodName = foodName?.takeIf { it.isNotBlank() } ?: "Your meal",
+                    foodImageUrl = foodImageUrl,
+                    curvePoints = curvePoints,
+                    shareCardUrl = url,
+                    onShare = {},
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            } else {
+                Box(
                     modifier = Modifier
                         .fillMaxWidth()
                         .aspectRatio(9f / 16f)
-                        .clip(RoundedCornerShape(18.dp)),
-                )
+                        .clip(RoundedCornerShape(18.dp))
+                        .background(Color(0xFFE8E0D0)),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    AsyncImage(
+                        model = resolvedUrl,
+                        contentDescription = "Gluci share card",
+                        contentScale = ContentScale.Fit,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .aspectRatio(9f / 16f)
+                            .clip(RoundedCornerShape(18.dp)),
+                    )
+                }
             }
             Spacer(Modifier.height(16.dp))
             shareLandingUrl?.let { landing ->

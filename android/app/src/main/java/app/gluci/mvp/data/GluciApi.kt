@@ -104,6 +104,7 @@ data class HistoryMessage(
     val verdict: String? = null,
     val intent: String? = null,
     val shareCardUrl: String? = null,
+    val shareLandingUrl: String? = null,
     val tip: String? = null,
     val food: String? = null,
     /** Present on assistant bubbles when backend stored glucose curve in metadata. */
@@ -111,6 +112,8 @@ data class HistoryMessage(
     @SerializedName("mealGI") val mealGI: Double? = null,
     @SerializedName("mealGL") val mealGL: Double? = null,
     val confidence: String? = null,
+    val topOrders: List<TopOrder>? = null,
+    val ragAdjusted: Boolean? = null,
 )
 
 data class ProfilePatch(

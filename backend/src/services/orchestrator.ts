@@ -541,6 +541,9 @@ export async function handleChatTurn(params: {
         ...(structured.mealGI !== undefined ? { mealGI: structured.mealGI } : {}),
         ...(structured.mealGL !== undefined ? { mealGL: structured.mealGL } : {}),
         ...(structured.confidence ? { confidence: structured.confidence } : {}),
+        ...(structured.topOrders?.length ? { topOrders: structured.topOrders } : {}),
+        ...(structured.ragAdjusted !== undefined ? { ragAdjusted: structured.ragAdjusted } : {}),
+        ...(shareLandingUrl ? { shareLandingUrl } : {}),
       }),
     },
   });
