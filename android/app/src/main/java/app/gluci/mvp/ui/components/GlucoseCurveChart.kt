@@ -50,6 +50,7 @@ import app.gluci.mvp.data.GluciCurvePoint
 import app.gluci.mvp.screens.reachableMediaUrl
 import coil.compose.AsyncImage
 import kotlin.math.cos
+import kotlin.math.exp
 import kotlin.math.min
 import kotlin.math.sin
 
@@ -254,32 +255,53 @@ fun GlucoseCurveChart(
                             if (curvePoints.size >= 2) {
                                 val actualMax = curvePoints.maxOf { it.mgDl }.toFloat()
                                 val scaleCeiling = maxOf(actualMax * 1.1f, MaxMgDl)
-                                val mapped = curvePoints.map { pt ->
+
+                                // Anchor on LLM peak — generate smooth Gaussian shape from it
+                                val peakPt = curvePoints.maxByOrNull { it.mgDl }!!
+                                val peakMin = peakPt.minute.toFloat()
+                                val peakVal = peakPt.mgDl.toFloat()
+                                val riseWidth = maxOf(peakMin / 2.5f, 12f)
+                                val fallWidth = maxOf((180f - peakMin) / 2.5f, 12f)
+
+                                fun gaussY(t: Float): Float {
+                                    if (peakVal <= 0f) return 0f
+                                    val sigma = if (t <= peakMin) riseWidth else fallWidth
+                                    val e = -(t - peakMin) * (t - peakMin) / (2f * sigma * sigma)
+                                    return peakVal * exp(e.toDouble()).toFloat()
+                                }
+
+                                val steps = 80
+                                val smoothPts = (0..steps).map { i ->
+                                    val t = i / steps.toFloat() * 180f
                                     Offset(
-                                        x = (pt.minute / 180f) * w,
-                                        y = h - (pt.mgDl.toFloat() / scaleCeiling) * h * 0.85f,
+                                        x = (t / 180f) * w,
+                                        y = h - (gaussY(t) / scaleCeiling) * h * 0.85f,
                                     )
                                 }
 
-                                val fillPath = Path().apply {
-                                    moveTo(mapped.first().x, h)
-                                    lineTo(mapped.first().x, mapped.first().y)
-                                    for (i in 1 until mapped.size) {
-                                        val prev = mapped[i - 1]
-                                        val curr = mapped[i]
-                                        val cp1x = prev.x + (curr.x - prev.x) * 0.5f
-                                        val cp2x = curr.x - (curr.x - prev.x) * 0.5f
-                                        cubicTo(cp1x, prev.y, cp2x, curr.y, curr.x, curr.y)
+                                fun buildFill(pts: List<Offset>, yShift: Float = 0f): Path = Path().apply {
+                                    moveTo(pts.first().x, h)
+                                    lineTo(pts.first().x, pts.first().y + yShift)
+                                    for (i in 1 until pts.size) {
+                                        val prev = pts[i - 1]
+                                        val curr = pts[i]
+                                        val cpx = (prev.x + curr.x) / 2f
+                                        cubicTo(cpx, prev.y + yShift, cpx, curr.y + yShift, curr.x, curr.y + yShift)
                                     }
-                                    lineTo(mapped.last().x, h)
+                                    lineTo(pts.last().x, h)
                                     close()
                                 }
-                                drawPath(fillPath, color = CurveBlack.copy(alpha = 0.88f))
+
+                                // Texture: faint layers above the fill simulate inky rough edge
+                                drawPath(buildFill(smoothPts, -6f), color = CurveBlack.copy(alpha = 0.04f))
+                                drawPath(buildFill(smoothPts, -3f), color = CurveBlack.copy(alpha = 0.09f))
+                                // Main fill
+                                drawPath(buildFill(smoothPts), color = CurveBlack.copy(alpha = 0.88f))
 
                                 // Spike tick marks + peak dot
-                                val peakIdx = curvePoints.indices.maxByOrNull { curvePoints[it].mgDl }
-                                    ?: return@clipRect
-                                val peakCenter = mapped[peakIdx.coerceIn(0, mapped.lastIndex)]
+                                val peakX = (peakMin / 180f) * w
+                                val peakY = h - (peakVal / scaleCeiling) * h * 0.85f
+                                val peakCenter = Offset(peakX, peakY)
                                 val tickLen = 12.dp.toPx()
                                 val tickAngles = doubleArrayOf(-150.0, -120.0, -90.0, -60.0, -30.0)
                                 for (deg in tickAngles) {

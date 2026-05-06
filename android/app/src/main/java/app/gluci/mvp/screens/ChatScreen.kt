@@ -520,7 +520,8 @@ private fun ChatMessageBubble(
                     !m.verdict.isNullOrBlank() &&
                     !m.verdict.equals("general", ignoreCase = true) &&
                     !m.intent.equals("general", ignoreCase = true) &&
-                    !hasFoodCurve
+                    !hasFoodCurve &&
+                    m.topOrders.isNullOrEmpty()
                 if (showInsight) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
@@ -582,7 +583,7 @@ private fun ChatMessageBubble(
                 if (showInsight) {
                     InsightStrip(m)
                 }
-                if (!isUser && !m.shareCardUrl.isNullOrBlank() && !hasFoodCurve) {
+                if (!isUser && !m.shareCardUrl.isNullOrBlank() && !hasFoodCurve && m.topOrders.isNullOrEmpty()) {
                     ShareCardPreview(
                         url = m.shareCardUrl,
                         onClick = { onShareCardClick(m.shareCardUrl!!, m.shareLandingUrl) },
@@ -607,6 +608,7 @@ private fun ChatMessageBubble(
             )
         } else if (!isUser && m.score != null &&
                    m.glucoseCurve.isNullOrEmpty() &&
+                   m.topOrders.isNullOrEmpty() &&
                    m.intent != "general" &&
                    m.intent != "non_food_barcode" && m.intent != "unknown_barcode" &&
                    !m.verdict.isNullOrBlank() && !m.verdict.equals("general", ignoreCase = true) &&
