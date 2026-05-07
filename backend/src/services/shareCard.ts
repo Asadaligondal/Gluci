@@ -49,6 +49,40 @@ function escapeXml(s: string): string {
     .replace(/"/g, "&quot;");
 }
 
+function wrapText(text: string, maxChars: number): string[] {
+  if (!text) return [];
+  const words = text.split(" ");
+  const lines: string[] = [];
+  let line = "";
+  for (const word of words) {
+    const test = line ? `${line} ${word}` : word;
+    if (test.length > maxChars && line) { lines.push(line); line = word; }
+    else line = test;
+  }
+  if (line) lines.push(line);
+  return lines;
+}
+
+type Pt = { x: number; y: number };
+
+function catmullRomPath(pts: Pt[], closeAtY?: number): string {
+  if (pts.length < 2) return "";
+  let d = closeAtY != null
+    ? `M ${pts[0].x.toFixed(1)} ${closeAtY.toFixed(1)} L ${pts[0].x.toFixed(1)} ${pts[0].y.toFixed(1)}`
+    : `M ${pts[0].x.toFixed(1)} ${pts[0].y.toFixed(1)}`;
+  for (let i = 0; i < pts.length - 1; i++) {
+    const p0 = i > 0 ? pts[i - 1] : pts[i];
+    const p1 = pts[i];
+    const p2 = pts[i + 1];
+    const p3 = i < pts.length - 2 ? pts[i + 2] : pts[i + 1];
+    d += ` C ${(p1.x + (p2.x - p0.x) / 6).toFixed(1)} ${(p1.y + (p2.y - p0.y) / 6).toFixed(1)}`
+       + ` ${(p2.x - (p3.x - p1.x) / 6).toFixed(1)} ${(p2.y - (p3.y - p1.y) / 6).toFixed(1)}`
+       + ` ${p2.x.toFixed(1)} ${p2.y.toFixed(1)}`;
+  }
+  if (closeAtY != null) d += ` L ${pts[pts.length - 1].x.toFixed(1)} ${closeAtY.toFixed(1)} Z`;
+  return d;
+}
+
 /** Exported for any consumers that still need a standalone curve SVG (e.g. tests). */
 export function generateCurveSVG(points: CurvePoint[], width: number, totalHeight: number): string {
   const plotH = Math.max(160, totalHeight - 32);
@@ -73,8 +107,7 @@ export function generateCurveSVG(points: CurvePoint[], width: number, totalHeigh
     }));
     fillPath = `M ${pts[0].x} ${plotH} L ${pts[0].x} ${pts[0].y}`;
     for (let i = 1; i < pts.length; i++) {
-      const prev = pts[i - 1];
-      const curr = pts[i];
+      const prev = pts[i - 1]; const curr = pts[i];
       const cpx = (prev.x + curr.x) / 2;
       fillPath += ` C ${cpx} ${prev.y} ${cpx} ${curr.y} ${curr.x} ${curr.y}`;
     }
@@ -105,205 +138,148 @@ async function loadFoodImageDataUri(
 }
 
 /**
- * Renders a PNG that replicates the Android GlucoseCurveChart card:
- * cream background, food title + pink underline, Y-axis labels, pink/green
- * colour zones, Gaussian curve fill, peak dot + ticks, optional food thumbnail.
- * 1080 × 700 px — suits Telegram, WhatsApp, and social sharing.
+ * Renders a 900×(1020|860)px PNG matching the new 4-section card design:
+ * bluish outer bg, Meal / Score+Verdict / Glucose Curve / Tip sections.
  */
 function buildAndroidCardSVG(params: {
   W: number;
-  H: number;
   foodName: string;
+  score: number;
+  verdict: string;
+  tip: string;
   glucoseCurve: CurvePoint[];
   imageDataUri: string | null;
   subtitle: string;
 }): string {
-  const { W, H, foodName, glucoseCurve, imageDataUri, subtitle } = params;
+  const { W, foodName, score, verdict, tip, glucoseCurve, imageDataUri, subtitle } = params;
 
-  // ── Layout (all values in px; 1dp ≈ 3px at this size) ────────────────────
-  const H_PAD = 42;        // 14dp
-  const TOP_PAD = 30;      // 10dp
-  const Y_AXIS_W = 156;    // 52dp
-  const TITLE_H = 100;     // title row height
-  const XAXIS_H = 58;      // x-axis row height
-  const FOOTER_H = 36;     // watermark strip height
+  const OUTER = 24, GAP = 10, RX = 24, iPAD = 30;
+  const inner_w = W - 2 * OUTER;   // 852
+  const hasTip = tip.trim().length > 0;
 
-  const CHART_H = H - TITLE_H - XAXIS_H - FOOTER_H;
-  const CHART_PAD = 24;    // 8dp inner padding top/bottom
+  // Section Y positions
+  const meal_y = OUTER;              const meal_h = 164;
+  const sv_y = meal_y + meal_h + GAP;  const sv_h = 184;
+  const curve_y = sv_y + sv_h + GAP;   const curve_h = 410;
+  const tip_y = curve_y + curve_h + GAP;
+  const tip_h = 148;
+  const H = hasTip ? tip_y + tip_h + OUTER + 36 : curve_y + curve_h + OUTER + 34;
 
-  const chartLeft = H_PAD + Y_AXIS_W;
-  const chartRight = W - H_PAD;
-  const chartW = chartRight - chartLeft;
-  const chartTop = TITLE_H + CHART_PAD;
-  const chartBottom = TITLE_H + CHART_H - CHART_PAD;
-  const chartInnerH = chartBottom - chartTop;
+  // ── Meal section ─────────────────────────────────────────────────────────
+  const hasImg = imageDataUri !== null;
+  const imgX = OUTER + iPAD, imgY = meal_y + OUTER, imgSize = 110;
+  const textX = hasImg ? imgX + imgSize + 18 : OUTER + iPAD;
 
-  const threshY = chartTop + chartInnerH * (1 - CURVE_THRESHOLD / CURVE_MAX_Y);
+  const rawName = foodName.trim() || "Your meal";
+  const withIdx = rawName.toLowerCase().indexOf(" with ");
+  const mainName = escapeXml((withIdx > 0 ? rawName.slice(0, withIdx) : rawName).slice(0, 22));
+  const subName = withIdx > 0 ? escapeXml(`with ${rawName.slice(withIdx + 6)}`.slice(0, 32)) : null;
+  const nameY = meal_y + (subName ? 122 : 136);
 
-  // ── Gaussian curve points ─────────────────────────────────────────────────
-  type Pt = { x: number; y: number };
+  // ── Score + Verdict section ───────────────────────────────────────────────
+  const card_w = Math.floor((inner_w - GAP) / 2);   // 421
+  const vcard_x = OUTER + card_w + GAP;
+
+  const vColor = verdict.toLowerCase().includes("avoid") ? "#E53935"
+    : verdict.toLowerCase().includes("modify") ? "#FF7043"
+    : "#1A1A1A";
+  const verdictLines = wrapText(verdict.trim() || "—", 18).slice(0, 3);
+
+  // ── Curve section ─────────────────────────────────────────────────────────
+  const cLeft = OUTER + 44, cRight = W - OUTER;       // 68, 876
+  const cTop = curve_y + 60, cBottom = curve_y + 335; // chart pixel boundaries
+  const cW = cRight - cLeft;
+  const cBottomPad = 10, cTopPad = 30;
+  const cDrawH = (cBottom - cTop) - cBottomPad - cTopPad;
+  const axisY = cBottom - cBottomPad;
+  const midX = cLeft + cW / 2;
+
   const curvePts: Pt[] = [];
-  let scaleCeiling = CURVE_MAX_Y;
-  let peakX = chartLeft + chartW * 0.5;
-  let peakY = chartTop + chartInnerH * 0.2;
+  let peakX = cLeft + cW * 0.5, peakY = cTop + cTopPad + cDrawH * 0.1;
 
   if (glucoseCurve.length >= 2) {
-    const peakRaw = glucoseCurve.reduce((b, p) => (p.mg_dl > b.mg_dl ? p : b), glucoseCurve[0]);
-    const peakMin = peakRaw.minute;
-    const peakVal = peakRaw.mg_dl;
     const actualMax = Math.max(...glucoseCurve.map((p) => p.mg_dl));
-    scaleCeiling = Math.max(actualMax * 1.1, CURVE_MAX_Y);
-    const riseW = Math.max(peakMin / 2.5, 12);
-    const fallW = Math.max((180 - peakMin) / 2.5, 12);
+    const scaleCeiling = Math.max(actualMax * 1.18, 40);
+    const peakRaw = glucoseCurve.reduce((b, p) => (p.mg_dl > b.mg_dl ? p : b), glucoseCurve[0]);
+    const peakMin = peakRaw.minute, peakVal = peakRaw.mg_dl;
+    const riseW = Math.max(peakMin / 2.5, 12), fallW = Math.max((180 - peakMin) / 2.5, 12);
 
     for (let i = 0; i <= 80; i++) {
       const t = (i / 80) * 180;
       const gY = gaussY(t, peakMin, peakVal, riseW, fallW);
       curvePts.push({
-        x: chartLeft + (t / 180) * chartW,
-        y: chartBottom - Math.min((gY / scaleCeiling) * chartInnerH * 0.85, chartInnerH * 0.88),
+        x: cLeft + (t / 180) * cW,
+        y: axisY - (gY / scaleCeiling) * cDrawH,
       });
     }
-    peakX = chartLeft + (peakMin / 180) * chartW;
-    peakY = chartBottom - Math.min((peakVal / scaleCeiling) * chartInnerH * 0.85, chartInnerH * 0.88);
+    peakX = cLeft + (peakMin / 180) * cW;
+    peakY = axisY - (peakVal / scaleCeiling) * cDrawH;
   }
 
-  // ── Build curve path with midpoint cubic bezier ───────────────────────────
-  function buildPath(pts: Pt[], yShift: number): string {
-    if (pts.length < 2) return "";
-    let d = `M ${pts[0].x.toFixed(1)} ${chartBottom} L ${pts[0].x.toFixed(1)} ${(pts[0].y + yShift).toFixed(1)}`;
-    for (let i = 1; i < pts.length; i++) {
-      const prev = pts[i - 1];
-      const curr = pts[i];
-      const cpx = (prev.x + curr.x) / 2;
-      d += ` C ${cpx.toFixed(1)} ${(prev.y + yShift).toFixed(1)} ${cpx.toFixed(1)} ${(curr.y + yShift).toFixed(1)} ${curr.x.toFixed(1)} ${(curr.y + yShift).toFixed(1)}`;
-    }
-    d += ` L ${pts[pts.length - 1].x.toFixed(1)} ${chartBottom} Z`;
-    return d;
-  }
+  const fillD = catmullRomPath(curvePts, axisY);
+  const strokeD = catmullRomPath(curvePts);
+  const xL1 = cBottom + 28, xL2 = cBottom + 50;
 
-  const mainPath = buildPath(curvePts, 0);
-  const texA = buildPath(curvePts, -18);  // -6dp texture
-  const texB = buildPath(curvePts, -9);   // -3dp texture
+  // ── Tip section ───────────────────────────────────────────────────────────
+  const tipLines = wrapText(tip.trim(), 52).slice(0, 2);
 
-  // ── Peak tick marks ───────────────────────────────────────────────────────
-  const tickLen = 36;
-  const peakTicks = curvePts.length >= 2
-    ? [-150, -120, -90, -60, -30].map((deg) => {
-        const rad = (deg * Math.PI) / 180;
-        return `<line x1="${peakX.toFixed(1)}" y1="${peakY.toFixed(1)}" x2="${(peakX + Math.cos(rad) * tickLen).toFixed(1)}" y2="${(peakY + Math.sin(rad) * tickLen).toFixed(1)}" stroke="#333333" stroke-width="4.5" stroke-linecap="round"/>`;
-      }).join("\n  ")
-    : "";
-
-  // ── Food image thumbnail + radiating ticks ────────────────────────────────
-  const imgCx = chartRight - 93;   // 31dp from right
-  const imgCy = chartTop + 93;     // 31dp from top
-  const imgSize = 150;             // 50dp
-  const imgX = imgCx - imgSize / 2;
-  const imgY = imgCy - imgSize / 2;
-
-  const radTicks = imageDataUri
-    ? [0, 45, 90, 135, 180, 225, 270, 315].map((deg) => {
-        const rad = (deg * Math.PI) / 180;
-        const innerR = 87; const outerR = 105;
-        return `<line x1="${(imgCx + Math.cos(rad) * innerR).toFixed(1)}" y1="${(imgCy + Math.sin(rad) * innerR).toFixed(1)}" x2="${(imgCx + Math.cos(rad) * outerR).toFixed(1)}" y2="${(imgCy + Math.sin(rad) * outerR).toFixed(1)}" stroke="#333333" stroke-opacity="0.55" stroke-width="4.5" stroke-linecap="round"/>`;
-      }).join("\n  ")
-    : "";
-
-  // ── Y-axis minor ticks at 20, 40, 60 mg/dL ───────────────────────────────
-  const yTicks = [20, 40, 60].map((v) => {
-    const ty = chartBottom - (v / scaleCeiling) * chartInnerH * 0.85;
-    return `<line x1="${chartLeft}" y1="${ty.toFixed(1)}" x2="${chartLeft + 15}" y2="${ty.toFixed(1)}" stroke="#888888" stroke-width="3"/>`;
-  }).join("\n  ");
-
-  // ── Asterisk decoration (6-spoke, next to title) ──────────────────────────
-  const asterCx = H_PAD + 280;
-  const asterCy = TOP_PAD + 38;
-  const asterR = 14;
-  const asterisk = [0, 60, 120, 180, 240, 300].map((deg) => {
-    const rad = (deg * Math.PI) / 180;
-    return `<line x1="${asterCx}" y1="${asterCy}" x2="${(asterCx + Math.cos(rad) * asterR).toFixed(1)}" y2="${(asterCy + Math.sin(rad) * asterR).toFixed(1)}" stroke="#888888" stroke-width="3.6" stroke-linecap="round"/>`;
-  }).join("\n  ");
-
-  // ── Threshold dotted overlay ──────────────────────────────────────────────
-  const dotLen = 12; const dotGap = 15;
-  const threshDots: string[] = [];
-  for (let dx = chartLeft; dx < chartRight; dx += dotLen + dotGap) {
-    const x2 = Math.min(dx + dotLen, chartRight);
-    threshDots.push(`<line x1="${dx.toFixed(1)}" y1="${threshY.toFixed(1)}" x2="${x2.toFixed(1)}" y2="${threshY.toFixed(1)}" stroke="black" stroke-opacity="0.25" stroke-width="9" stroke-linecap="round"/>`);
-  }
-
-  const title = escapeXml(foodName.slice(0, 34));
-  const sub = escapeXml(subtitle);
-  const xAxisY = TITLE_H + CHART_H + 40;
-
+  // ── SVG ───────────────────────────────────────────────────────────────────
   return `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${W}" height="${H}">
   <defs>
-    <clipPath id="chartClip">
-      <rect x="${chartLeft}" y="${chartTop}" width="${chartW}" height="${chartInnerH}"/>
-    </clipPath>
-    ${imageDataUri ? `<clipPath id="imgClip"><rect x="${imgX}" y="${imgY}" width="${imgSize}" height="${imgSize}" rx="24"/></clipPath>` : ""}
+    <clipPath id="chartClip"><rect x="${cLeft}" y="${cTop}" width="${cW}" height="${cBottom - cTop}"/></clipPath>
+    ${hasImg ? `<clipPath id="imgClip"><rect x="${imgX}" y="${imgY}" width="${imgSize}" height="${imgSize}" rx="16"/></clipPath>` : ""}
   </defs>
 
-  <!-- Card background + border -->
-  <rect width="${W}" height="${H}" fill="#FAF8F5" rx="42"/>
-  <rect x="1.5" y="1.5" width="${W - 3}" height="${H - 3}" fill="none" stroke="#111111" stroke-width="3" rx="41"/>
+  <!-- Outer background -->
+  <rect width="${W}" height="${H}" fill="#E8EBF8" rx="42"/>
 
-  <!-- Title + pink underline -->
-  <text x="${H_PAD}" y="${TOP_PAD + 55}" font-family="Georgia,'Times New Roman',serif" font-weight="bold" font-size="42" fill="#111111">${title}</text>
-  <rect x="${H_PAD}" y="${TOP_PAD + 65}" width="144" height="6" fill="#E91E8C" rx="3"/>
+  <!-- ─ Meal ─ -->
+  <rect x="${OUTER}" y="${meal_y}" width="${inner_w}" height="${meal_h}" rx="${RX}" fill="white"/>
+  ${hasImg ? `<image href="${imageDataUri}" x="${imgX}" y="${imgY}" width="${imgSize}" height="${imgSize}" clip-path="url(#imgClip)" preserveAspectRatio="xMidYMid slice"/>` : ""}
+  <text x="${textX}" y="${meal_y + 66}" font-family="Arial,sans-serif" font-size="25" fill="#999999">Meal</text>
+  <text x="${textX}" y="${nameY}" font-family="Arial,sans-serif" font-weight="bold" font-size="34" fill="#1A1A1A">${mainName}</text>
+  ${subName ? `<text x="${textX}" y="${meal_y + 158}" font-family="Arial,sans-serif" font-size="26" fill="#888888">${subName}</text>` : ""}
 
-  <!-- Asterisk decoration -->
-  ${asterisk}
+  <!-- ─ Score card ─ -->
+  <rect x="${OUTER}" y="${sv_y}" width="${card_w}" height="${sv_h}" rx="${RX}" fill="white"/>
+  <text x="${OUTER + iPAD}" y="${sv_y + 46}" font-family="Arial,sans-serif" font-size="26" fill="#888888">Glucose Score</text>
+  <text x="${OUTER + iPAD}" y="${sv_y + 160}" font-family="Arial,sans-serif">
+    <tspan font-size="86" font-weight="bold" fill="#5C6BC0">${score.toFixed(1)}</tspan><tspan font-size="34" fill="#AAAAAA"> /10</tspan>
+  </text>
 
-  <!-- Y-axis labels -->
-  <text x="${H_PAD + Y_AXIS_W - 12}" y="${chartTop + 28}" font-family="Georgia,'Times New Roman',serif" font-size="34" fill="#555555" text-anchor="end">+60</text>
-  <text x="${H_PAD + Y_AXIS_W - 12}" y="${(threshY + 4).toFixed(1)}" font-family="Georgia,'Times New Roman',serif" font-size="34" fill="#E91E8C" font-weight="bold" text-anchor="end">spike</text>
-  <text x="${H_PAD + Y_AXIS_W - 12}" y="${(chartBottom - 6).toFixed(1)}" font-family="Georgia,'Times New Roman',serif" font-size="34" fill="#555555" text-anchor="end">baseline</text>
+  <!-- ─ Verdict card ─ -->
+  <rect x="${vcard_x}" y="${sv_y}" width="${card_w}" height="${sv_h}" rx="${RX}" fill="#F2F2F2"/>
+  <text x="${vcard_x + iPAD}" y="${sv_y + 46}" font-family="Arial,sans-serif" font-size="26" fill="#888888">Verdict</text>
+  ${verdictLines.map((l, i) => `<text x="${vcard_x + iPAD}" y="${sv_y + 96 + i * 40}" font-family="Arial,sans-serif" font-weight="bold" font-size="32" fill="${vColor}">${escapeXml(l)}</text>`).join("\n  ")}
 
-  <!-- Colour zones -->
-  <rect x="${chartLeft}" y="${chartTop}" width="${chartW}" height="${(threshY - chartTop).toFixed(1)}" fill="#FFD6E0" clip-path="url(#chartClip)"/>
-  <rect x="${chartLeft}" y="${threshY.toFixed(1)}" width="${chartW}" height="${(chartBottom - threshY).toFixed(1)}" fill="#D8EFDA" clip-path="url(#chartClip)"/>
+  <!-- ─ Curve card ─ -->
+  <rect x="${OUTER}" y="${curve_y}" width="${inner_w}" height="${curve_h}" rx="${RX}" fill="white"/>
+  <text x="${OUTER + iPAD}" y="${curve_y + 42}" font-family="Arial,sans-serif" font-weight="600" font-size="30" fill="#333333">Your Glucose Curve</text>
+  <text transform="rotate(-90,${OUTER + 16},${(cTop + cBottom) / 2})" x="${OUTER + 16}" y="${(cTop + cBottom) / 2}" font-family="Arial,sans-serif" font-size="24" fill="#888888" text-anchor="middle">Glucose</text>
+  <line x1="${cLeft}" y1="${cTop}" x2="${cLeft}" y2="${axisY}" stroke="#BBBBBB" stroke-width="2"/>
+  <line x1="${cLeft}" y1="${axisY}" x2="${cRight}" y2="${axisY}" stroke="#BBBBBB" stroke-width="2"/>
+  ${fillD ? `<path d="${fillD}" fill="#5C6BC0" fill-opacity="0.10" clip-path="url(#chartClip)"/>` : ""}
+  ${strokeD ? `<path d="${strokeD}" fill="none" stroke="#5C6BC0" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" clip-path="url(#chartClip)"/>` : ""}
+  ${curvePts.length >= 2 ? `<circle cx="${peakX.toFixed(1)}" cy="${peakY.toFixed(1)}" r="8" fill="white"/><circle cx="${peakX.toFixed(1)}" cy="${peakY.toFixed(1)}" r="5" fill="#5C6BC0"/>` : ""}
+  <text x="${cLeft}" y="${xL1}" font-family="Arial,sans-serif" font-size="24" font-weight="500" fill="#666666">0m</text>
+  <text x="${cLeft}" y="${xL2}" font-family="Arial,sans-serif" font-size="22" fill="#999999">Meal</text>
+  <text x="${midX}" y="${xL1}" font-family="Arial,sans-serif" font-size="24" font-weight="500" fill="#666666" text-anchor="middle">+60m</text>
+  <text x="${midX}" y="${xL2}" font-family="Arial,sans-serif" font-size="22" fill="#999999" text-anchor="middle">Peak</text>
+  <text x="${cRight}" y="${xL1}" font-family="Arial,sans-serif" font-size="24" font-weight="500" fill="#666666" text-anchor="end">+120m</text>
+  <text x="${cRight}" y="${xL2}" font-family="Arial,sans-serif" font-size="22" fill="#999999" text-anchor="end">Return</text>
 
-  <!-- Threshold border + dots -->
-  <line x1="${chartLeft}" y1="${threshY.toFixed(1)}" x2="${chartRight}" y2="${threshY.toFixed(1)}" stroke="#333333" stroke-opacity="0.55" stroke-width="4.5"/>
-  ${threshDots.join("\n  ")}
+  ${hasTip ? `<!-- ─ Tip card ─ -->
+  <rect x="${OUTER}" y="${tip_y}" width="${inner_w}" height="${tip_h}" rx="${RX}" fill="white"/>
+  <circle cx="${OUTER + 22}" cy="${tip_y + 46}" r="9" fill="#5C6BC0"/>
+  <text x="${OUTER + 46}" y="${tip_y + 54}" font-family="Arial,sans-serif" font-weight="bold" font-size="28" fill="#1A1A1A">Want a flatter curve?</text>
+  ${tipLines.map((l, i) => `<text x="${OUTER + 46}" y="${tip_y + 92 + i * 32}" font-family="Arial,sans-serif" font-size="24" fill="#666666">${escapeXml(l)}</text>`).join("\n  ")}` : ""}
 
-  <!-- Y-axis minor ticks -->
-  ${yTicks}
-
-  <!-- Dashed baseline -->
-  <line x1="${chartLeft}" y1="${(chartBottom - 1.5).toFixed(1)}" x2="${chartRight}" y2="${(chartBottom - 1.5).toFixed(1)}" stroke="#CCCCCC" stroke-width="4.5" stroke-dasharray="18,12"/>
-
-  <!-- Gaussian curve — texture + main fill -->
-  ${mainPath ? `
-  <path d="${texA}" fill="#111111" fill-opacity="0.04" clip-path="url(#chartClip)"/>
-  <path d="${texB}" fill="#111111" fill-opacity="0.09" clip-path="url(#chartClip)"/>
-  <path d="${mainPath}" fill="#111111" fill-opacity="0.88" clip-path="url(#chartClip)"/>` : ""}
-
-  <!-- Peak ticks + dot -->
-  ${peakTicks}
-  ${curvePts.length >= 2 ? `
-  <circle cx="${peakX.toFixed(1)}" cy="${peakY.toFixed(1)}" r="15" fill="white"/>
-  <circle cx="${peakX.toFixed(1)}" cy="${peakY.toFixed(1)}" r="9" fill="#333333"/>` : ""}
-
-  <!-- Radiating ticks around food image -->
-  ${radTicks}
-
-  <!-- Food image thumbnail -->
-  ${imageDataUri ? `<image href="${imageDataUri}" x="${imgX}" y="${imgY}" width="${imgSize}" height="${imgSize}" clip-path="url(#imgClip)" preserveAspectRatio="xMidYMid slice"/>` : ""}
-
-  <!-- X-axis labels -->
-  <text x="${chartLeft + 12}" y="${xAxisY}" font-family="Georgia,'Times New Roman',serif" font-size="33" fill="#555555">eating time</text>
-  <text x="${chartRight}" y="${xAxisY}" font-family="Georgia,'Times New Roman',serif" font-size="33" fill="#555555" text-anchor="end">&#x2192; +3 hours</text>
-
-  <!-- Watermark + invite subtitle -->
-  <text x="${chartRight}" y="${H - 10}" font-family="Georgia,'Times New Roman',serif" font-weight="bold" font-size="34" fill="#E91E8C" fill-opacity="0.45" text-anchor="end">gluci</text>
-  <text x="${H_PAD}" y="${H - 10}" font-family="Georgia,'Times New Roman',serif" font-size="26" fill="#AAAAAA">${sub}</text>
+  <!-- Watermark -->
+  <text x="${W - OUTER}" y="${H - 12}" font-family="Arial,sans-serif" font-weight="bold" font-size="28" fill="#5C6BC0" fill-opacity="0.45" text-anchor="end">gluci</text>
 </svg>`;
 }
 
-/** Renders the Android-style GlucoseCurveChart card as a 1080×700 PNG. */
+/** Renders a 900px-wide PNG matching the new 4-section card design. */
 export async function renderShareCard(params: {
   score: number;
   verdict: string;
@@ -320,9 +296,11 @@ export async function renderShareCard(params: {
   const imageDataUri = await loadFoodImageDataUri(params.heroImagePath, params.heroImageUrl);
 
   const svgStr = buildAndroidCardSVG({
-    W: 1080,
-    H: 700,
+    W: 900,
     foodName: (params.foodName ?? "Your meal").trim() || "Your meal",
+    score: params.score,
+    verdict: params.verdict,
+    tip: params.insight,
     glucoseCurve: params.glucoseCurve ?? [],
     imageDataUri,
     subtitle: params.subtitle ?? "gluci.app",
