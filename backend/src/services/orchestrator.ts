@@ -21,6 +21,9 @@ import { getConversationForUser } from "./conversationService.js";
 import { ensureShareRef } from "./shareRef.js";
 import { logAnalytics } from "./analytics.js";
 import { findRelevantKnowledge, extractGlucoseHint } from "./knowledgeBase.js";
+import { classifyFoodCurve } from "./curveClassifier.js";
+
+const USE_AI_CURVE = true;
 
 function stripBarcodeAnnotations(text: string): string {
   return text
@@ -357,43 +360,62 @@ export async function handleChatTurn(params: {
       // Food product — route through hybrid pipeline (same as photo path)
       foodLabel = barcodeProduct.name;
       productImageUrl = barcodeProduct.imageUrl ?? undefined;
-      const ingredients = extractIngredientsFromProduct(barcodeProduct);
-      let calculation = fallbackGlucoseCalculation();
-      try {
-        calculation = await calculateMealGlucose(ingredients);
-      } catch (e) {
-        console.warn("calculateMealGlucose (barcode):", e);
+
+      if (USE_AI_CURVE) {
+        const aiResult = await classifyFoodCurve({
+          foodName: barcodeProduct.name,
+          imageBase64: barcodeProduct.imageUrl ? undefined : undefined,
+        });
+        structured = {
+          userReply: aiResult.message,
+          glucoseGalScore: aiResult.score,
+          verdict: aiResult.verdictText,
+          intent: "meal",
+          countAsDecision: true,
+          suggestShareCard: true,
+          glucoseCurve: aiResult.curvePoints,
+          tip: aiResult.tip,
+          confidence: aiResult.confidence,
+          ragAdjusted: false,
+        };
+      } else {
+        const ingredients = extractIngredientsFromProduct(barcodeProduct);
+        let calculation = fallbackGlucoseCalculation();
+        try {
+          calculation = await calculateMealGlucose(ingredients);
+        } catch (e) {
+          console.warn("calculateMealGlucose (barcode):", e);
+        }
+
+        let knowledge: Awaited<ReturnType<typeof findRelevantKnowledge>> = [];
+        try {
+          knowledge = await findRelevantKnowledge(barcodeProduct.name, 3);
+        } catch (e) {
+          console.warn("findRelevantKnowledge (barcode):", e);
+        }
+
+        const ragHint = extractGlucoseHint(knowledge);
+        const finalCalc = applyRAGAdjustment(calculation, ragHint);
+        const { message, tip } = await generateFoodReply(barcodeProduct.name, finalCalc, knowledge, profileCtx);
+        const verdictCap = finalCalc.verdict.charAt(0).toUpperCase() + finalCalc.verdict.slice(1);
+        const confidence = barcodeProduct.nutrients?.carbs != null ? ("high" as const) : finalCalc.confidence;
+
+        structured = {
+          userReply: message,
+          glucoseGalScore: finalCalc.score,
+          verdict: verdictCap,
+          intent: "meal",
+          countAsDecision: true,
+          suggestShareCard: true,
+          glucoseCurve: finalCalc.curvePoints,
+          tip,
+          mealGI: finalCalc.mealGI,
+          mealGL: finalCalc.mealGL,
+          confidence,
+          ragAdjusted: ragHint.hasHint,
+          ragSource: ragHint.source || undefined,
+        };
       }
-
-      let knowledge: Awaited<ReturnType<typeof findRelevantKnowledge>> = [];
-      try {
-        knowledge = await findRelevantKnowledge(barcodeProduct.name, 3);
-      } catch (e) {
-        console.warn("findRelevantKnowledge (barcode):", e);
-      }
-
-      const ragHint = extractGlucoseHint(knowledge);
-      const finalCalc = applyRAGAdjustment(calculation, ragHint);
-      const { message, tip } = await generateFoodReply(barcodeProduct.name, finalCalc, knowledge, profileCtx);
-      const verdictCap = finalCalc.verdict.charAt(0).toUpperCase() + finalCalc.verdict.slice(1);
-      // Real OFF nutrient data beats our GI lookup → confidence is high
-      const confidence = barcodeProduct.nutrients?.carbs != null ? ("high" as const) : finalCalc.confidence;
-
-      structured = {
-        userReply: message,
-        glucoseGalScore: finalCalc.score,
-        verdict: verdictCap,
-        intent: "meal",
-        countAsDecision: true,
-        suggestShareCard: true,
-        glucoseCurve: finalCalc.curvePoints,
-        tip,
-        mealGI: finalCalc.mealGI,
-        mealGL: finalCalc.mealGL,
-        confidence,
-        ragAdjusted: ragHint.hasHint,
-        ragSource: ragHint.source || undefined,
-      };
     }
   } else {
     // ── Normal photo / text path (unchanged) ─────────────────────────────────
@@ -413,58 +435,78 @@ export async function handleChatTurn(params: {
     if (extraction.intent === "meal" && extraction.ingredients.length > 0) {
       const meal = extraction;
       foodLabel = meal.foodName.trim() || summarizeFoodInput(enriched || llmUserText) || undefined;
-      const ingredients = estimatePortions(meal.ingredients);
-      let calculation = fallbackGlucoseCalculation();
-      try {
-        calculation = await calculateMealGlucose(ingredients);
-      } catch (e) {
-        console.warn("calculateMealGlucose:", e);
-        calculation = fallbackGlucoseCalculation();
-      }
 
-      let knowledge: Awaited<ReturnType<typeof findRelevantKnowledge>> = [];
-      try {
-        knowledge = await findRelevantKnowledge(meal.foodName, 3);
-      } catch (e) {
-        console.warn("findRelevantKnowledge (meal):", e);
-      }
-
-      const ragHint = extractGlucoseHint(knowledge);
-      let finalCalc = applyRAGAdjustment(calculation, ragHint);
-
-      // LLM sanity check — catches formula outliers like salmon scoring 1.0
-      try {
-        const sanity = await checkScoreReasonability(
-          meal.foodName,
-          meal.ingredients,
-          finalCalc.score,
-          finalCalc.verdict,
-        );
-        if (sanity.shouldAdjust) {
-          console.log("[llm-sanity]", sanity);
-          finalCalc = { ...finalCalc, score: sanity.adjustedScore, verdict: sanity.adjustedVerdict };
+      if (USE_AI_CURVE) {
+        const aiResult = await classifyFoodCurve({
+          foodName: meal.foodName,
+          imageBase64: params.imageBase64,
+          mimeType: params.mimeType,
+        });
+        structured = {
+          userReply: aiResult.message,
+          glucoseGalScore: aiResult.score,
+          verdict: aiResult.verdictText,
+          intent: "meal",
+          countAsDecision: true,
+          suggestShareCard: true,
+          glucoseCurve: aiResult.curvePoints,
+          tip: aiResult.tip,
+          confidence: aiResult.confidence,
+          ragAdjusted: false,
+        };
+      } else {
+        const ingredients = estimatePortions(meal.ingredients);
+        let calculation = fallbackGlucoseCalculation();
+        try {
+          calculation = await calculateMealGlucose(ingredients);
+        } catch (e) {
+          console.warn("calculateMealGlucose:", e);
+          calculation = fallbackGlucoseCalculation();
         }
-      } catch (e) {
-        console.warn("checkScoreReasonability:", e);
-      }
 
-      const { message, tip } = await generateFoodReply(meal.foodName, finalCalc, knowledge, profileCtx);
-      const verdictCap = finalCalc.verdict.charAt(0).toUpperCase() + finalCalc.verdict.slice(1);
-      structured = {
-        userReply: message,
-        glucoseGalScore: finalCalc.score,
-        verdict: verdictCap,
-        intent: "meal",
-        countAsDecision: true,
-        suggestShareCard: true,
-        glucoseCurve: finalCalc.curvePoints,
-        tip,
-        mealGI: finalCalc.mealGI,
-        mealGL: finalCalc.mealGL,
-        confidence: finalCalc.confidence,
-        ragAdjusted: ragHint.hasHint,
-        ragSource: ragHint.source || undefined,
-      };
+        let knowledge: Awaited<ReturnType<typeof findRelevantKnowledge>> = [];
+        try {
+          knowledge = await findRelevantKnowledge(meal.foodName, 3);
+        } catch (e) {
+          console.warn("findRelevantKnowledge (meal):", e);
+        }
+
+        const ragHint = extractGlucoseHint(knowledge);
+        let finalCalc = applyRAGAdjustment(calculation, ragHint);
+
+        try {
+          const sanity = await checkScoreReasonability(
+            meal.foodName,
+            meal.ingredients,
+            finalCalc.score,
+            finalCalc.verdict,
+          );
+          if (sanity.shouldAdjust) {
+            console.log("[llm-sanity]", sanity);
+            finalCalc = { ...finalCalc, score: sanity.adjustedScore, verdict: sanity.adjustedVerdict };
+          }
+        } catch (e) {
+          console.warn("checkScoreReasonability:", e);
+        }
+
+        const { message, tip } = await generateFoodReply(meal.foodName, finalCalc, knowledge, profileCtx);
+        const verdictCap = finalCalc.verdict.charAt(0).toUpperCase() + finalCalc.verdict.slice(1);
+        structured = {
+          userReply: message,
+          glucoseGalScore: finalCalc.score,
+          verdict: verdictCap,
+          intent: "meal",
+          countAsDecision: true,
+          suggestShareCard: true,
+          glucoseCurve: finalCalc.curvePoints,
+          tip,
+          mealGI: finalCalc.mealGI,
+          mealGL: finalCalc.mealGL,
+          confidence: finalCalc.confidence,
+          ragAdjusted: ragHint.hasHint,
+          ragSource: ragHint.source || undefined,
+        };
+      }
     } else {
       let knowledgeContext: Awaited<ReturnType<typeof findRelevantKnowledge>> = [];
       try {

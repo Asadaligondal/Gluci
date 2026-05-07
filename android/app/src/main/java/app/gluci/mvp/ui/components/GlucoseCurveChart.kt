@@ -30,7 +30,6 @@ import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.gluci.mvp.data.GluciCurvePoint
-import kotlin.math.exp
 
 private val CurvePurple = Color(0xFF5C6BC0)
 private val CurveFillColor = Color(0x1A5C6BC0)
@@ -121,29 +120,19 @@ fun GlucoseCurveChart(
 
                 if (curvePoints.size >= 2) {
                     val actualMax = curvePoints.maxOf { it.mgDl }.toFloat()
-                    val scaleCeiling = maxOf(actualMax * 1.18f, 40f)
+                    val scaleCeiling = maxOf(actualMax * 1.15f, 20f)
 
-                    val peakPt = curvePoints.maxByOrNull { it.mgDl }!!
-                    val peakMin = peakPt.minute.toFloat()
-                    val peakVal = peakPt.mgDl.toFloat()
-                    val riseWidth = maxOf(peakMin / 2.5f, 12f)
-                    val fallWidth = maxOf((180f - peakMin) / 2.5f, 12f)
-
-                    fun gaussY(t: Float): Float {
-                        if (peakVal <= 0f) return 0f
-                        val sigma = if (t <= peakMin) riseWidth else fallWidth
-                        val exponent = -((t - peakMin) * (t - peakMin)) / (2.0 * sigma * sigma)
-                        return peakVal * exp(exponent).toFloat()
-                    }
-
-                    val steps = 80
-                    val pts = (0..steps).map { i ->
-                        val t = i / steps.toFloat() * 180f
+                    val sorted = curvePoints.sortedBy { it.minute }
+                    val pts = sorted.map { pt ->
                         Offset(
-                            x = (t / 180f) * w,
-                            y = h - bottomPad - (gaussY(t) / scaleCeiling) * drawH,
+                            x = (pt.minute.toFloat() / 180f) * w,
+                            y = h - bottomPad - (pt.mgDl.toFloat() / scaleCeiling) * drawH,
                         )
                     }
+
+                    val peakPt = curvePoints.maxByOrNull { it.mgDl }!!
+                    val peakX = (peakPt.minute.toFloat() / 180f) * w
+                    val peakY = h - bottomPad - (peakPt.mgDl.toFloat() / scaleCeiling) * drawH
 
                     // Catmull-Rom control points for smooth fill
                     drawPath(
@@ -188,8 +177,6 @@ fun GlucoseCurveChart(
                     )
 
                     // Peak dot
-                    val peakX = (peakMin / 180f) * w
-                    val peakY = h - bottomPad - (peakVal / scaleCeiling) * drawH
                     drawCircle(Color.White, radius = 5.dp.toPx(), center = Offset(peakX, peakY))
                     drawCircle(CurvePurple, radius = 3.dp.toPx(), center = Offset(peakX, peakY))
                 }

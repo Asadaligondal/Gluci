@@ -198,22 +198,18 @@ function buildAndroidCardSVG(params: {
   let peakX = cLeft + cW * 0.5, peakY = cTop + cTopPad + cDrawH * 0.1;
 
   if (glucoseCurve.length >= 2) {
-    const actualMax = Math.max(...glucoseCurve.map((p) => p.mg_dl));
-    const scaleCeiling = Math.max(actualMax * 1.18, 40);
-    const peakRaw = glucoseCurve.reduce((b, p) => (p.mg_dl > b.mg_dl ? p : b), glucoseCurve[0]);
-    const peakMin = peakRaw.minute, peakVal = peakRaw.mg_dl;
-    const riseW = Math.max(peakMin / 2.5, 12), fallW = Math.max((180 - peakMin) / 2.5, 12);
-
-    for (let i = 0; i <= 80; i++) {
-      const t = (i / 80) * 180;
-      const gY = gaussY(t, peakMin, peakVal, riseW, fallW);
+    const sorted = [...glucoseCurve].sort((a, b) => a.minute - b.minute);
+    const actualMax = Math.max(...sorted.map((p) => p.mg_dl));
+    const scaleCeiling = Math.max(actualMax * 1.15, 20);
+    for (const pt of sorted) {
       curvePts.push({
-        x: cLeft + (t / 180) * cW,
-        y: axisY - (gY / scaleCeiling) * cDrawH,
+        x: cLeft + (pt.minute / 180) * cW,
+        y: axisY - (pt.mg_dl / scaleCeiling) * cDrawH,
       });
     }
-    peakX = cLeft + (peakMin / 180) * cW;
-    peakY = axisY - (peakVal / scaleCeiling) * cDrawH;
+    const peakRaw = glucoseCurve.reduce((b, p) => (p.mg_dl > b.mg_dl ? p : b), glucoseCurve[0]);
+    peakX = cLeft + (peakRaw.minute / 180) * cW;
+    peakY = axisY - (peakRaw.mg_dl / scaleCeiling) * cDrawH;
   }
 
   const fillD = catmullRomPath(curvePts, axisY);
