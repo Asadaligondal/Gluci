@@ -2,394 +2,217 @@ package app.gluci.mvp.ui.components
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Share
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.drawscope.clipRect
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.graphics.StrokeJoin
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
 import app.gluci.mvp.data.GluciCurvePoint
-import app.gluci.mvp.screens.reachableMediaUrl
-import coil.compose.AsyncImage
-import kotlin.math.cos
 import kotlin.math.exp
-import kotlin.math.min
-import kotlin.math.sin
 
-private val CreamBg = Color(0xFFFAF8F5)
-private val PinkAccent = Color(0xFFE91E8C)
-private val ZonePinkSoft = Color(0xFFFFD6E0)
-private val ZoneGreenSoft = Color(0xFFD8EFDA)
-private val BaselineGray = Color(0xFFCCCCCC)
-private val CurveBlack = Color(0xFF111111)
-
-private const val MaxMgDl = 80f
+private val CurvePurple = Color(0xFF5C6BC0)
+private val CurveFillColor = Color(0x1A5C6BC0)
 
 @Composable
 fun GlucoseCurveChart(
     curvePoints: List<GluciCurvePoint>,
-    foodName: String,
-    foodImageUrl: String? = null,
-    onShare: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
-    val resolvedImg = remember(foodImageUrl) { foodImageUrl?.reachableMediaUrl() }
-    val title = remember(foodName) { foodName.trim().ifEmpty { "Your meal" } }
-    var showFullImage by remember { mutableStateOf(false) }
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .background(Color.White, RoundedCornerShape(14.dp))
+            .padding(horizontal = 12.dp, vertical = 12.dp),
+    ) {
+        Text(
+            "Your Glucose Curve",
+            fontSize = 16.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = Color(0xFF333333),
+        )
+        Spacer(Modifier.height(8.dp))
 
-    // Fullscreen image dialog
-    if (showFullImage && resolvedImg != null) {
-        Dialog(
-            onDismissRequest = { showFullImage = false },
-            properties = DialogProperties(usePlatformDefaultWidth = false),
-        ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(Color.Black.copy(alpha = 0.92f))
-                    .clickable { showFullImage = false },
-                contentAlignment = Alignment.Center,
-            ) {
-                AsyncImage(
-                    model = resolvedImg,
-                    contentDescription = title,
-                    contentScale = ContentScale.Fit,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-            }
-        }
-    }
-
-    Box(modifier = modifier.fillMaxWidth()) {
-        Column(
+        Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(CreamBg, RoundedCornerShape(14.dp))
-                .border(2.dp, Color.Black, RoundedCornerShape(14.dp))
-                .padding(bottom = 8.dp),
+                .height(160.dp),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            // Food title row with decorative ticks
-            Row(
-                modifier = Modifier.padding(start = 14.dp, end = 14.dp, top = 10.dp, bottom = 4.dp),
-                verticalAlignment = Alignment.CenterVertically,
+            // Properly rotated Y-axis label using layout swap
+            Box(
+                modifier = Modifier
+                    .width(20.dp)
+                    .fillMaxHeight(),
+                contentAlignment = Alignment.Center,
             ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = title,
-                        fontSize = 15.sp,
-                        fontWeight = FontWeight.Bold,
-                        fontFamily = FontFamily.Cursive,
-                        color = Color(0xFF111111),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    Spacer(Modifier.height(3.dp))
-                    Box(
-                        modifier = Modifier
-                            .width(48.dp)
-                            .height(2.dp)
-                            .background(PinkAccent),
-                    )
-                }
-                // Asterisk ticks next to title
-                Canvas(modifier = Modifier.size(20.dp, 16.dp)) {
-                    val cx = size.width / 2
-                    val cy = size.height / 2
-                    val r = 5.dp.toPx()
-                    val angles = listOf(0.0, 60.0, 120.0, 180.0, 240.0, 300.0)
-                    for (a in angles) {
-                        val rad = Math.toRadians(a)
-                        drawLine(
-                            color = Color(0xFF888888),
-                            start = Offset(cx, cy),
-                            end = Offset(cx + (cos(rad) * r).toFloat(), cy + (sin(rad) * r).toFloat()),
-                            strokeWidth = 1.2.dp.toPx(),
-                            cap = StrokeCap.Round,
+                Text(
+                    "Glucose",
+                    fontSize = 11.sp,
+                    color = Color(0xFF888888),
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier
+                        .layout { measurable, constraints ->
+                            val placeable = measurable.measure(
+                                Constraints(
+                                    minWidth = constraints.minHeight,
+                                    maxWidth = constraints.maxHeight,
+                                    minHeight = constraints.minWidth,
+                                    maxHeight = constraints.maxWidth,
+                                ),
+                            )
+                            layout(placeable.height, placeable.width) {
+                                placeable.placeRelative(
+                                    x = -(placeable.width - placeable.height) / 2,
+                                    y = -(placeable.height - placeable.width) / 2,
+                                )
+                            }
+                        }
+                        .rotate(-90f),
+                )
+            }
+
+            Canvas(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxHeight(),
+            ) {
+                val w = size.width
+                val h = size.height
+                val bottomPad = 4.dp.toPx()
+                val topPad = 14.dp.toPx()
+                val drawH = h - bottomPad - topPad
+
+                // X-axis line
+                drawLine(
+                    color = Color(0xFFBBBBBB),
+                    start = Offset(0f, h - bottomPad),
+                    end = Offset(w, h - bottomPad),
+                    strokeWidth = 1.5.dp.toPx(),
+                )
+                // Y-axis line
+                drawLine(
+                    color = Color(0xFFBBBBBB),
+                    start = Offset(0f, topPad),
+                    end = Offset(0f, h - bottomPad),
+                    strokeWidth = 1.5.dp.toPx(),
+                )
+
+                if (curvePoints.size >= 2) {
+                    val actualMax = curvePoints.maxOf { it.mgDl }.toFloat()
+                    val scaleCeiling = maxOf(actualMax * 1.18f, 40f)
+
+                    val peakPt = curvePoints.maxByOrNull { it.mgDl }!!
+                    val peakMin = peakPt.minute.toFloat()
+                    val peakVal = peakPt.mgDl.toFloat()
+                    val riseWidth = maxOf(peakMin / 2.5f, 12f)
+                    val fallWidth = maxOf((180f - peakMin) / 2.5f, 12f)
+
+                    fun gaussY(t: Float): Float {
+                        if (peakVal <= 0f) return 0f
+                        val sigma = if (t <= peakMin) riseWidth else fallWidth
+                        val exponent = -((t - peakMin) * (t - peakMin)) / (2.0 * sigma * sigma)
+                        return peakVal * exp(exponent).toFloat()
+                    }
+
+                    val steps = 80
+                    val pts = (0..steps).map { i ->
+                        val t = i / steps.toFloat() * 180f
+                        Offset(
+                            x = (t / 180f) * w,
+                            y = h - bottomPad - (gaussY(t) / scaleCeiling) * drawH,
                         )
                     }
-                }
-            }
 
-            // Chart row
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(180.dp),
-            ) {
-                // Y-axis labels
-                Column(
-                    modifier = Modifier
-                        .width(56.dp)
-                        .fillMaxHeight()
-                        .padding(end = 8.dp, top = 8.dp, bottom = 8.dp),
-                    verticalArrangement = Arrangement.SpaceBetween,
-                ) {
-                    Text(
-                        "+60",
-                        fontSize = 13.sp,
-                        fontFamily = FontFamily.Cursive,
-                        color = Color(0xFF555555),
-                        textAlign = TextAlign.End,
-                        modifier = Modifier.fillMaxWidth().padding(end = 4.dp),
-                    )
-                    Text(
-                        "spike",
-                        fontSize = 13.sp,
-                        fontFamily = FontFamily.Cursive,
-                        color = PinkAccent,
-                        fontWeight = FontWeight.Bold,
-                        textAlign = TextAlign.End,
-                        modifier = Modifier.fillMaxWidth().padding(end = 4.dp),
-                    )
-                    Text(
-                        "baseline",
-                        fontSize = 13.sp,
-                        fontFamily = FontFamily.Cursive,
-                        color = Color(0xFF555555),
-                        textAlign = TextAlign.End,
-                        modifier = Modifier.fillMaxWidth().padding(end = 4.dp),
-                    )
-                }
-
-                // Canvas + food image overlay
-                Box(
-                    modifier = Modifier
-                        .weight(1f)
-                        .fillMaxHeight(),
-                ) {
-                    Canvas(modifier = Modifier.fillMaxSize()) {
-                        val w = size.width
-                        val h = size.height
-                        val thresholdY = h * (1f - 30f / MaxMgDl)
-
-                        clipRect(0f, 0f, w, h) {
-                            // Colour zones
-                            drawRect(ZoneGreenSoft, topLeft = Offset(0f, thresholdY), size = Size(w, h - thresholdY))
-                            drawRect(ZonePinkSoft, topLeft = Offset.Zero, size = Size(w, thresholdY))
-
-                            // Solid border at zone colour boundary (spike threshold)
-                            drawLine(
-                                color = Color(0xFF333333).copy(alpha = 0.55f),
-                                start = Offset(0f, thresholdY),
-                                end = Offset(w, thresholdY),
-                                strokeWidth = 1.5.dp.toPx(),
-                            )
-                            // Dotted segments on that boundary for texture
-                            val dotLen = 4.dp.toPx()
-                            val dotGap = 5.dp.toPx()
-                            var dotX = 0f
-                            while (dotX < w) {
-                                drawLine(
-                                    color = Color.Black.copy(alpha = 0.25f),
-                                    start = Offset(dotX, thresholdY),
-                                    end = Offset(min(dotX + dotLen, w), thresholdY),
-                                    strokeWidth = 3.dp.toPx(),
-                                    cap = StrokeCap.Round,
-                                )
-                                dotX += dotLen + dotGap
-                            }
-
-                            // Y-axis tick marks at 20, 40, 60 mg/dL
-                            for (value in listOf(20f, 40f, 60f)) {
-                                val ty = h - (value / MaxMgDl) * h * 0.85f
-                                drawLine(
-                                    color = Color(0xFF888888),
-                                    start = Offset(0f, ty),
-                                    end = Offset(5.dp.toPx(), ty),
-                                    strokeWidth = 1.dp.toPx(),
+                    // Catmull-Rom control points for smooth fill
+                    drawPath(
+                        Path().apply {
+                            moveTo(pts.first().x, h - bottomPad)
+                            lineTo(pts.first().x, pts.first().y)
+                            for (i in 0 until pts.size - 1) {
+                                val p0 = if (i > 0) pts[i - 1] else pts[i]
+                                val p1 = pts[i]
+                                val p2 = pts[i + 1]
+                                val p3 = if (i < pts.size - 2) pts[i + 2] else pts[i + 1]
+                                cubicTo(
+                                    p1.x + (p2.x - p0.x) / 6f, p1.y + (p2.y - p0.y) / 6f,
+                                    p2.x - (p3.x - p1.x) / 6f, p2.y - (p3.y - p1.y) / 6f,
+                                    p2.x, p2.y,
                                 )
                             }
+                            lineTo(pts.last().x, h - bottomPad)
+                            close()
+                        },
+                        color = CurveFillColor,
+                    )
 
-                            // Dashed baseline at bottom
-                            val dashW = 6.dp.toPx()
-                            val gapW = 4.dp.toPx()
-                            var xPos = 0f
-                            while (xPos < w) {
-                                drawLine(
-                                    color = BaselineGray,
-                                    start = Offset(xPos, h - 0.5f),
-                                    end = Offset(min(xPos + dashW, w), h - 0.5f),
-                                    strokeWidth = 1.5.dp.toPx(),
+                    // Catmull-Rom stroke
+                    drawPath(
+                        Path().apply {
+                            moveTo(pts.first().x, pts.first().y)
+                            for (i in 0 until pts.size - 1) {
+                                val p0 = if (i > 0) pts[i - 1] else pts[i]
+                                val p1 = pts[i]
+                                val p2 = pts[i + 1]
+                                val p3 = if (i < pts.size - 2) pts[i + 2] else pts[i + 1]
+                                cubicTo(
+                                    p1.x + (p2.x - p0.x) / 6f, p1.y + (p2.y - p0.y) / 6f,
+                                    p2.x - (p3.x - p1.x) / 6f, p2.y - (p3.y - p1.y) / 6f,
+                                    p2.x, p2.y,
                                 )
-                                xPos += dashW + gapW
                             }
+                        },
+                        color = CurvePurple,
+                        style = Stroke(width = 2.5.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round),
+                    )
 
-                            if (curvePoints.size >= 2) {
-                                val actualMax = curvePoints.maxOf { it.mgDl }.toFloat()
-                                val scaleCeiling = maxOf(actualMax * 1.1f, MaxMgDl)
-
-                                // Anchor on LLM peak — generate smooth Gaussian shape from it
-                                val peakPt = curvePoints.maxByOrNull { it.mgDl }!!
-                                val peakMin = peakPt.minute.toFloat()
-                                val peakVal = peakPt.mgDl.toFloat()
-                                val riseWidth = maxOf(peakMin / 2.5f, 12f)
-                                val fallWidth = maxOf((180f - peakMin) / 2.5f, 12f)
-
-                                fun gaussY(t: Float): Float {
-                                    if (peakVal <= 0f) return 0f
-                                    val sigma = if (t <= peakMin) riseWidth else fallWidth
-                                    val e = -(t - peakMin) * (t - peakMin) / (2f * sigma * sigma)
-                                    return peakVal * exp(e.toDouble()).toFloat()
-                                }
-
-                                val steps = 80
-                                val smoothPts = (0..steps).map { i ->
-                                    val t = i / steps.toFloat() * 180f
-                                    Offset(
-                                        x = (t / 180f) * w,
-                                        y = h - (gaussY(t) / scaleCeiling) * h * 0.85f,
-                                    )
-                                }
-
-                                fun buildFill(pts: List<Offset>, yShift: Float = 0f): Path = Path().apply {
-                                    moveTo(pts.first().x, h)
-                                    lineTo(pts.first().x, pts.first().y + yShift)
-                                    for (i in 1 until pts.size) {
-                                        val prev = pts[i - 1]
-                                        val curr = pts[i]
-                                        val cpx = (prev.x + curr.x) / 2f
-                                        cubicTo(cpx, prev.y + yShift, cpx, curr.y + yShift, curr.x, curr.y + yShift)
-                                    }
-                                    lineTo(pts.last().x, h)
-                                    close()
-                                }
-
-                                // Texture: faint layers above the fill simulate inky rough edge
-                                drawPath(buildFill(smoothPts, -6f), color = CurveBlack.copy(alpha = 0.04f))
-                                drawPath(buildFill(smoothPts, -3f), color = CurveBlack.copy(alpha = 0.09f))
-                                // Main fill
-                                drawPath(buildFill(smoothPts), color = CurveBlack.copy(alpha = 0.88f))
-
-                                // Spike tick marks + peak dot
-                                val peakX = (peakMin / 180f) * w
-                                val peakY = h - (peakVal / scaleCeiling) * h * 0.85f
-                                val peakCenter = Offset(peakX, peakY)
-                                val tickLen = 12.dp.toPx()
-                                val tickAngles = doubleArrayOf(-150.0, -120.0, -90.0, -60.0, -30.0)
-                                for (deg in tickAngles) {
-                                    val rad = Math.toRadians(deg)
-                                    drawLine(
-                                        color = Color(0xFF333333),
-                                        start = peakCenter,
-                                        end = Offset(
-                                            peakCenter.x + (cos(rad) * tickLen).toFloat(),
-                                            peakCenter.y + (sin(rad) * tickLen).toFloat(),
-                                        ),
-                                        strokeWidth = 1.5.dp.toPx(),
-                                        cap = StrokeCap.Round,
-                                    )
-                                }
-                                drawCircle(Color.White, radius = 5.dp.toPx(), center = peakCenter)
-                                drawCircle(Color(0xFF333333), radius = 3.dp.toPx(), center = peakCenter)
-                            }
-
-                            // Radiating ticks around food image (top-right)
-                            if (resolvedImg != null) {
-                                val imgCx = w - 31.dp.toPx()
-                                val imgCy = 31.dp.toPx()
-                                val innerR = 29.dp.toPx()
-                                val outerR = 35.dp.toPx()
-                                for (i in 0 until 8) {
-                                    val rad = Math.toRadians(i * 45.0)
-                                    drawLine(
-                                        color = Color(0xFF333333).copy(alpha = 0.55f),
-                                        start = Offset(imgCx + (cos(rad) * innerR).toFloat(), imgCy + (sin(rad) * innerR).toFloat()),
-                                        end = Offset(imgCx + (cos(rad) * outerR).toFloat(), imgCy + (sin(rad) * outerR).toFloat()),
-                                        strokeWidth = 1.5.dp.toPx(),
-                                        cap = StrokeCap.Round,
-                                    )
-                                }
-                            }
-                        }
-                    }
-
-                    // Food image — top-right, tappable for fullscreen
-                    resolvedImg?.let { url ->
-                        Box(
-                            modifier = Modifier
-                                .align(Alignment.TopEnd)
-                                .padding(6.dp)
-                                .size(50.dp)
-                                .clip(RoundedCornerShape(8.dp))
-                                .background(Color.White)
-                                .clickable { showFullImage = true },
-                        ) {
-                            AsyncImage(
-                                model = url,
-                                contentDescription = title,
-                                contentScale = ContentScale.Crop,
-                                modifier = Modifier.fillMaxSize(),
-                            )
-                        }
-                    }
+                    // Peak dot
+                    val peakX = (peakMin / 180f) * w
+                    val peakY = h - bottomPad - (peakVal / scaleCeiling) * drawH
+                    drawCircle(Color.White, radius = 5.dp.toPx(), center = Offset(peakX, peakY))
+                    drawCircle(CurvePurple, radius = 3.dp.toPx(), center = Offset(peakX, peakY))
                 }
-            }
-
-            // X-axis labels
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(start = 60.dp, end = 8.dp, top = 2.dp, bottom = 2.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-            ) {
-                Text("eating time", fontSize = 13.sp, fontFamily = FontFamily.Cursive, color = Color(0xFF555555))
-                Text("→ +3 hours", fontSize = 13.sp, fontFamily = FontFamily.Cursive, color = Color(0xFF555555))
             }
         }
 
-        // Share icon — top-right of card, no background
-        if (onShare != null) {
-            IconButton(
-                onClick = { onShare.invoke() },
-                modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .padding(4.dp)
-                    .size(28.dp),
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Share,
-                    contentDescription = "Share",
-                    tint = Color(0xFF1B5E20),
-                    modifier = Modifier.size(16.dp),
-                )
+        // X-axis labels
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = 20.dp, top = 4.dp),
+        ) {
+            Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.Start) {
+                Text("0m", fontSize = 13.sp, fontWeight = FontWeight.Medium, color = Color(0xFF666666))
+                Text("Meal", fontSize = 12.sp, color = Color(0xFF999999))
+            }
+            Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
+                Text("+60m", fontSize = 13.sp, fontWeight = FontWeight.Medium, color = Color(0xFF666666))
+                Text("Peak", fontSize = 12.sp, color = Color(0xFF999999))
+            }
+            Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.End) {
+                Text("+120m", fontSize = 13.sp, fontWeight = FontWeight.Medium, color = Color(0xFF666666))
+                Text("Return", fontSize = 12.sp, color = Color(0xFF999999))
             }
         }
     }
