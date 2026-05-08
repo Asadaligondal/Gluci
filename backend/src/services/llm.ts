@@ -288,6 +288,109 @@ export function getOpenAIClient(): OpenAI {
   return new OpenAI({ apiKey: getConfig().OPENAI_API_KEY });
 }
 
+const RESTAURANT_SYSTEM = `You are a clinical nutritionist specialising in glucose response.
+Given a restaurant name or menu text, pick the 3 best dishes for stable blood sugar.
+
+Return ONLY valid JSON, no prose outside it:
+{
+  "message": "2-3 sentence intro about the restaurant and your reasoning",
+  "topOrders": [
+    { "name": "exact dish name", "score": <1.0-10.0>, "tweaks": "one actionable tip to lower the glucose impact" },
+    { "name": "...", "score": ..., "tweaks": "..." },
+    { "name": "...", "score": ..., "tweaks": "..." }
+  ]
+}
+
+Scoring (glucose impact — lower GI = higher score):
+9-10: protein/fat dominant, virtually no refined carbs
+7-8: mixed, good fibre or protein, moderate carbs
+5-6: higher carbs but some redeeming factors
+1-4: high refined carbs, fried, sugary`;
+
+export async function analyzeRestaurant(params: {
+  restaurantName?: string;
+  menuText?: string;
+  profileContext?: string;
+}): Promise<GluciResponse> {
+  const openai = getOpenAIClient();
+
+  let inputText = params.profileContext
+    ? `User profile: ${params.profileContext}\n\n`
+    : "";
+
+  let useWebSearch = false;
+
+  if (params.menuText) {
+    inputText += `Menu content:\n${params.menuText.slice(0, 4000)}\n\nPick the top 3 lowest glucose-impact dishes from this menu.`;
+  } else if (params.restaurantName) {
+    inputText += `Restaurant: ${params.restaurantName}\n\nSearch for this restaurant's current menu and pick the top 3 lowest glucose-impact dishes.`;
+    useWebSearch = true;
+  } else {
+    throw new Error("analyzeRestaurant: restaurantName or menuText required");
+  }
+
+  let rawText = "{}";
+
+  if (useWebSearch) {
+    // OpenAI Responses API with built-in web search
+    type ResponsesAPI = {
+      responses: {
+        create: (p: {
+          model: string;
+          tools: { type: string }[];
+          instructions: string;
+          input: string;
+        }) => Promise<{ output_text: string }>;
+      };
+    };
+    const resp = await (openai as unknown as ResponsesAPI).responses.create({
+      model: "gpt-4o",
+      tools: [{ type: "web_search_preview" }],
+      instructions: RESTAURANT_SYSTEM,
+      input: inputText,
+    });
+    rawText = resp.output_text ?? "{}";
+  } else {
+    const resp = await openai.chat.completions.create({
+      model: "gpt-4o",
+      max_tokens: 700,
+      messages: [
+        { role: "system", content: RESTAURANT_SYSTEM },
+        { role: "user", content: inputText },
+      ],
+    });
+    rawText = resp.choices[0]?.message?.content?.trim() ?? "{}";
+  }
+
+  let parsed: Record<string, unknown> = {};
+  try {
+    parsed = JSON.parse(rawText);
+  } catch {
+    const m = rawText.match(/\{[\s\S]*\}/);
+    if (m) { try { parsed = JSON.parse(m[0]); } catch { /* leave empty */ } }
+  }
+
+  const topOrders = parseTopOrders(parsed.topOrders) ?? [];
+  const message =
+    typeof parsed.message === "string" && parsed.message.trim()
+      ? parsed.message.trim()
+      : "Here are the best options for stable glucose at this restaurant.";
+  const avgScore =
+    topOrders.length > 0
+      ? Math.round((topOrders.reduce((s, o) => s + o.score, 0) / topOrders.length) * 10) / 10
+      : 5;
+
+  return {
+    userReply: message,
+    glucoseGalScore: avgScore,
+    verdict: "Restaurant picks",
+    intent: "restaurant",
+    countAsDecision: true,
+    suggestShareCard: false,
+    topOrders,
+  };
+}
+
 function parseFoodExtraction(raw: unknown): FoodExtraction {
   const o = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
   const intent = o.intent === "meal" ? "meal" : "chat";
