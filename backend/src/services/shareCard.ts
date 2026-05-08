@@ -158,8 +158,8 @@ function buildAndroidCardSVG(params: {
   const hasTip = tip.trim().length > 0;
 
   // Section Y positions
-  const meal_y = OUTER;              const meal_h = 164;
-  const sv_y = meal_y + meal_h + GAP;  const sv_h = 184;
+  const meal_y = OUTER;              const meal_h = 210;
+  const sv_y = meal_y + meal_h + GAP;  const sv_h = 260;
   const curve_y = sv_y + sv_h + GAP;   const curve_h = 410;
   const tip_y = curve_y + curve_h + GAP;
   const tip_h = 148;
@@ -174,16 +174,15 @@ function buildAndroidCardSVG(params: {
   const withIdx = rawName.toLowerCase().indexOf(" with ");
   const mainName = escapeXml((withIdx > 0 ? rawName.slice(0, withIdx) : rawName).slice(0, 22));
   const subName = withIdx > 0 ? escapeXml(`with ${rawName.slice(withIdx + 6)}`.slice(0, 32)) : null;
-  const nameY = meal_y + (subName ? 122 : 136);
+  const nameY = meal_y + (subName ? 150 : 168);
 
   // ── Score + Verdict section ───────────────────────────────────────────────
-  const card_w = Math.floor((inner_w - GAP) / 2);   // 421
-  const vcard_x = OUTER + card_w + GAP;
-
-  const vColor = verdict.toLowerCase().includes("avoid") ? "#E53935"
-    : verdict.toLowerCase().includes("modify") ? "#FF7043"
-    : "#1A1A1A";
-  const verdictLines = wrapText(verdict.trim() || "—", 18).slice(0, 3);
+  const halfW = Math.floor(inner_w / 2);
+  const vInnerX = OUTER + halfW + 10;
+  const vInnerY = sv_y + 16;
+  const vInnerW = inner_w - halfW - 20;
+  const vInnerH = sv_h - 32;
+  const verdictLines = wrapText(verdict.trim() || "—", 16).slice(0, 3);
 
   // ── Curve section ─────────────────────────────────────────────────────────
   const cLeft = OUTER + 44, cRight = W - OUTER;       // 68, 876
@@ -234,21 +233,20 @@ function buildAndroidCardSVG(params: {
   <!-- ─ Meal ─ -->
   <rect x="${OUTER}" y="${meal_y}" width="${inner_w}" height="${meal_h}" rx="${RX}" fill="white"/>
   ${hasImg ? `<image href="${imageDataUri}" x="${imgX}" y="${imgY}" width="${imgSize}" height="${imgSize}" clip-path="url(#imgClip)" preserveAspectRatio="xMidYMid slice"/>` : ""}
-  <text x="${textX}" y="${meal_y + 66}" font-family="Arial,sans-serif" font-size="25" fill="#999999">Meal</text>
-  <text x="${textX}" y="${nameY}" font-family="Arial,sans-serif" font-weight="bold" font-size="34" fill="#1A1A1A">${mainName}</text>
-  ${subName ? `<text x="${textX}" y="${meal_y + 158}" font-family="Arial,sans-serif" font-size="26" fill="#888888">${subName}</text>` : ""}
+  <text x="${textX}" y="${meal_y + 76}" font-family="Arial,sans-serif" font-size="25" fill="#999999">Meal</text>
+  <text x="${textX}" y="${nameY}" font-family="Arial,sans-serif" font-weight="bold" font-size="36" fill="#1A1A1A">${mainName}</text>
+  ${subName ? `<text x="${textX}" y="${meal_y + 190}" font-family="Arial,sans-serif" font-size="28" fill="#888888">${subName}</text>` : ""}
 
-  <!-- ─ Score card ─ -->
-  <rect x="${OUTER}" y="${sv_y}" width="${card_w}" height="${sv_h}" rx="${RX}" fill="white"/>
-  <text x="${OUTER + iPAD}" y="${sv_y + 46}" font-family="Arial,sans-serif" font-size="26" fill="#888888">Glucose Score</text>
-  <text x="${OUTER + iPAD}" y="${sv_y + 160}" font-family="Arial,sans-serif">
-    <tspan font-size="86" font-weight="bold" fill="#5C6BC0">${score.toFixed(1)}</tspan><tspan font-size="34" fill="#AAAAAA"> /10</tspan>
+  <!-- ─ Score + Verdict outer card ─ -->
+  <rect x="${OUTER}" y="${sv_y}" width="${inner_w}" height="${sv_h}" rx="${RX}" fill="white"/>
+  <text x="${OUTER + iPAD}" y="${sv_y + 52}" font-family="Arial,sans-serif" font-size="26" fill="#888888">Glucose Score</text>
+  <text x="${OUTER + iPAD}" y="${sv_y + 200}" font-family="Arial,sans-serif">
+    <tspan font-size="100" font-weight="bold" fill="#5C6BC0">${score.toFixed(1)}</tspan><tspan font-size="40" fill="#AAAAAA"> /10</tspan>
   </text>
-
-  <!-- ─ Verdict card ─ -->
-  <rect x="${vcard_x}" y="${sv_y}" width="${card_w}" height="${sv_h}" rx="${RX}" fill="white"/>
-  <text x="${vcard_x + iPAD}" y="${sv_y + 46}" font-family="Arial,sans-serif" font-size="26" fill="#888888">Verdict</text>
-  ${verdictLines.map((l, i) => `<text x="${vcard_x + iPAD}" y="${sv_y + 96 + i * 40}" font-family="Arial,sans-serif" font-weight="bold" font-size="32" fill="${vColor}">${escapeXml(l)}</text>`).join("\n  ")}
+  <!-- ─ Verdict inner card ─ -->
+  <rect x="${vInnerX}" y="${vInnerY}" width="${vInnerW}" height="${vInnerH}" rx="16" fill="#F2F4FC"/>
+  <text x="${vInnerX + iPAD}" y="${vInnerY + 46}" font-family="Arial,sans-serif" font-size="26" fill="#888888">Verdict</text>
+  ${verdictLines.map((l, i) => `<text x="${vInnerX + iPAD}" y="${vInnerY + 102 + i * 52}" font-family="Arial,sans-serif" font-weight="bold" font-size="38" fill="#1A1A1A">${escapeXml(l)}</text>`).join("\n  ")}
 
   <!-- ─ Curve card ─ -->
   <rect x="${OUTER}" y="${curve_y}" width="${inner_w}" height="${curve_h}" rx="${RX}" fill="white"/>

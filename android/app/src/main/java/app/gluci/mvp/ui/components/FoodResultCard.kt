@@ -30,14 +30,7 @@ private val Indigo = Color(0xFF5C6BC0)
 private val CardBg = Color.White
 private val OuterBg = Color(0xFFEDF0FC)
 
-private fun verdictColor(raw: String): Color {
-    val v = raw.trim().lowercase()
-    return when {
-        v.contains("avoid") -> Color(0xFFE53935)
-        v.contains("modify") -> Color(0xFFFF7043)
-        else -> Color(0xFF1A1A1A)
-    }
-}
+private val VerdictInnerBg = Color(0xFFF2F4FC)
 
 @Composable
 fun FoodResultCard(
@@ -81,7 +74,7 @@ fun FoodResultCard(
             modifier = Modifier
                 .fillMaxWidth()
                 .background(CardBg, RoundedCornerShape(14.dp))
-                .padding(14.dp),
+                .padding(16.dp),
             horizontalArrangement = Arrangement.spacedBy(14.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -91,32 +84,32 @@ fun FoodResultCard(
                     contentDescription = name,
                     contentScale = ContentScale.Crop,
                     modifier = Modifier
-                        .size(72.dp)
-                        .clip(RoundedCornerShape(12.dp)),
+                        .size(88.dp)
+                        .clip(RoundedCornerShape(14.dp)),
                 )
             }
             Column {
                 Text("Meal", fontSize = 12.sp, color = Color(0xFF999999), fontWeight = FontWeight.Medium)
-                Spacer(Modifier.height(3.dp))
-                Text(mainName, fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Color(0xFF1A1A1A))
+                Spacer(Modifier.height(4.dp))
+                Text(mainName, fontSize = 20.sp, fontWeight = FontWeight.Bold, color = Color(0xFF1A1A1A))
                 if (subDesc != null) {
+                    Spacer(Modifier.height(2.dp))
                     Text(subDesc, fontSize = 14.sp, color = Color(0xFF888888))
                 }
             }
         }
 
-        // Score + Verdict
+        // Score + Verdict — one outer card, nested inner card for verdict
         Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(CardBg, RoundedCornerShape(14.dp))
+                .padding(14.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            // Score card
-            Column(
-                modifier = Modifier
-                    .weight(1f)
-                    .background(CardBg, RoundedCornerShape(14.dp))
-                    .padding(14.dp),
-            ) {
+            // Score (left)
+            Column(modifier = Modifier.weight(1f)) {
                 Text("Glucose Score", fontSize = 13.sp, color = Color(0xFF888888))
                 Spacer(Modifier.height(6.dp))
                 Row(verticalAlignment = Alignment.Bottom) {
@@ -134,21 +127,21 @@ fun FoodResultCard(
                     )
                 }
             }
-            // Verdict card
+            // Verdict inner card (right)
             Column(
                 modifier = Modifier
                     .weight(1f)
-                    .background(CardBg, RoundedCornerShape(14.dp))
-                    .padding(14.dp),
+                    .background(VerdictInnerBg, RoundedCornerShape(12.dp))
+                    .padding(12.dp),
             ) {
                 Text("Verdict", fontSize = 13.sp, color = Color(0xFF888888))
                 Spacer(Modifier.height(6.dp))
                 Text(
                     verdict.trim().ifEmpty { "—" },
-                    fontSize = 18.sp,
+                    fontSize = 20.sp,
                     fontWeight = FontWeight.Bold,
-                    color = verdictColor(verdict),
-                    lineHeight = 24.sp,
+                    color = Color(0xFF1A1A1A),
+                    lineHeight = 26.sp,
                 )
             }
         }
