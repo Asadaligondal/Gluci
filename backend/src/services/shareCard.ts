@@ -196,6 +196,7 @@ function buildAndroidCardSVG(params: {
 
   const curvePts: Pt[] = [];
   let peakX = cLeft + cW * 0.5, peakY = cTop + cTopPad + cDrawH * 0.1;
+  let peakMin = 60;
 
   if (glucoseCurve.length >= 2) {
     const sorted = [...glucoseCurve].sort((a, b) => a.minute - b.minute);
@@ -208,6 +209,7 @@ function buildAndroidCardSVG(params: {
       });
     }
     const peakRaw = glucoseCurve.reduce((b, p) => (p.mg_dl > b.mg_dl ? p : b), glucoseCurve[0]);
+    peakMin = peakRaw.minute;
     peakX = cLeft + (peakRaw.minute / 180) * cW;
     peakY = axisY - (peakRaw.mg_dl / scaleCeiling) * cDrawH;
   }
@@ -227,7 +229,7 @@ function buildAndroidCardSVG(params: {
   </defs>
 
   <!-- Outer background -->
-  <rect width="${W}" height="${H}" fill="#E8EBF8" rx="42"/>
+  <rect width="${W}" height="${H}" fill="#EDF0FC" rx="42"/>
 
   <!-- ─ Meal ─ -->
   <rect x="${OUTER}" y="${meal_y}" width="${inner_w}" height="${meal_h}" rx="${RX}" fill="white"/>
@@ -244,7 +246,7 @@ function buildAndroidCardSVG(params: {
   </text>
 
   <!-- ─ Verdict card ─ -->
-  <rect x="${vcard_x}" y="${sv_y}" width="${card_w}" height="${sv_h}" rx="${RX}" fill="#F2F2F2"/>
+  <rect x="${vcard_x}" y="${sv_y}" width="${card_w}" height="${sv_h}" rx="${RX}" fill="white"/>
   <text x="${vcard_x + iPAD}" y="${sv_y + 46}" font-family="Arial,sans-serif" font-size="26" fill="#888888">Verdict</text>
   ${verdictLines.map((l, i) => `<text x="${vcard_x + iPAD}" y="${sv_y + 96 + i * 40}" font-family="Arial,sans-serif" font-weight="bold" font-size="32" fill="${vColor}">${escapeXml(l)}</text>`).join("\n  ")}
 
@@ -256,13 +258,17 @@ function buildAndroidCardSVG(params: {
   <line x1="${cLeft}" y1="${axisY}" x2="${cRight}" y2="${axisY}" stroke="#BBBBBB" stroke-width="2"/>
   ${fillD ? `<path d="${fillD}" fill="#5C6BC0" fill-opacity="0.10" clip-path="url(#chartClip)"/>` : ""}
   ${strokeD ? `<path d="${strokeD}" fill="none" stroke="#5C6BC0" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" clip-path="url(#chartClip)"/>` : ""}
-  ${curvePts.length >= 2 ? `<circle cx="${peakX.toFixed(1)}" cy="${peakY.toFixed(1)}" r="8" fill="white"/><circle cx="${peakX.toFixed(1)}" cy="${peakY.toFixed(1)}" r="5" fill="#5C6BC0"/>` : ""}
+  ${curvePts.length >= 2 ? `
+  <line x1="${peakX.toFixed(1)}" y1="${(peakY + 8).toFixed(1)}" x2="${peakX.toFixed(1)}" y2="${axisY}" stroke="#5C6BC0" stroke-opacity="0.45" stroke-width="2" stroke-dasharray="10,6"/>
+  <circle cx="${peakX.toFixed(1)}" cy="${peakY.toFixed(1)}" r="9" fill="white"/>
+  <circle cx="${peakX.toFixed(1)}" cy="${peakY.toFixed(1)}" r="6" fill="#5C6BC0"/>` : ""}
   <text x="${cLeft}" y="${xL1}" font-family="Arial,sans-serif" font-size="24" font-weight="500" fill="#666666">0m</text>
   <text x="${cLeft}" y="${xL2}" font-family="Arial,sans-serif" font-size="22" fill="#999999">Meal</text>
-  <text x="${midX}" y="${xL1}" font-family="Arial,sans-serif" font-size="24" font-weight="500" fill="#666666" text-anchor="middle">+60m</text>
-  <text x="${midX}" y="${xL2}" font-family="Arial,sans-serif" font-size="22" fill="#999999" text-anchor="middle">Peak</text>
+  <text x="${peakX.toFixed(1)}" y="${xL1}" font-family="Arial,sans-serif" font-size="24" font-weight="500" fill="#666666" text-anchor="middle">+${peakMin}m</text>
+  <text x="${peakX.toFixed(1)}" y="${xL2}" font-family="Arial,sans-serif" font-size="22" fill="#5C6BC0" font-weight="600" text-anchor="middle">Peak</text>
   <text x="${cRight}" y="${xL1}" font-family="Arial,sans-serif" font-size="24" font-weight="500" fill="#666666" text-anchor="end">+120m</text>
   <text x="${cRight}" y="${xL2}" font-family="Arial,sans-serif" font-size="22" fill="#999999" text-anchor="end">Return</text>
+  <text x="${cRight}" y="${(xL2 + 26)}" font-family="Arial,sans-serif" font-size="20" fill="#BBBBBB" text-anchor="end">Time →</text>
 
   ${hasTip ? `<!-- ─ Tip card ─ -->
   <rect x="${OUTER}" y="${tip_y}" width="${inner_w}" height="${tip_h}" rx="${RX}" fill="white"/>

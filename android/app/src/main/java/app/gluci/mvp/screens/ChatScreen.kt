@@ -115,8 +115,18 @@ fun ChatScreen(
     var input by remember { mutableStateOf("") }
     val listState = rememberLazyListState()
     var sharedCard by remember { mutableStateOf<UiMessage?>(null) }
+    var fullScreenCard by remember { mutableStateOf<UiMessage?>(null) }
     var pendingImageUri by remember { mutableStateOf<Uri?>(null) }
     val ctx = LocalContext.current
+
+    val shareGluciCard: (UiMessage) -> Unit = { msg ->
+        msg.shareLandingUrl?.let { land ->
+            val cm = ctx.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+            cm.setPrimaryClip(ClipData.newPlainText("Gluci invite", land))
+            Toast.makeText(ctx, "Invite link copied", Toast.LENGTH_SHORT).show()
+        }
+        sharedCard = msg
+    }
 
     LaunchedEffect(conversationId) {
         vm.openConversation(conversationId) { }
@@ -207,14 +217,8 @@ fun ChatScreen(
                     ChatMessageBubble(
                         m = messages[i],
                         onShareCardClick = { _, _ -> sharedCard = messages[i] },
-                        shareGluciCard = { msg ->
-                            msg.shareLandingUrl?.let { land ->
-                                val cm = ctx.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                                cm.setPrimaryClip(ClipData.newPlainText("Gluci invite", land))
-                                Toast.makeText(ctx, "Invite link copied", Toast.LENGTH_SHORT).show()
-                            }
-                            sharedCard = msg
-                        },
+                        shareGluciCard = shareGluciCard,
+                        onCardClick = { msg -> fullScreenCard = msg },
                     )
                 }
                 val showTypingIndicator = busy && messages.lastOrNull()?.role == "user"
@@ -288,6 +292,70 @@ fun ChatScreen(
                     busy = busy,
                 )
             }
+            }
+        }
+        fullScreenCard?.let { msg ->
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .background(Color(0xFFEDF0FC)),
+            ) {
+                Column(Modifier.fillMaxSize()) {
+                    Box(
+                        Modifier
+                            .fillMaxWidth()
+                            .statusBarsPadding()
+                            .padding(horizontal = 4.dp, vertical = 6.dp),
+                    ) {
+                        IconButton(
+                            onClick = { fullScreenCard = null },
+                            modifier = Modifier.align(Alignment.CenterStart),
+                        ) {
+                            Icon(
+                                Icons.AutoMirrored.Filled.ArrowBack,
+                                contentDescription = "Back",
+                                tint = Color(0xFF5C6BC0),
+                            )
+                        }
+                        Text(
+                            "gluci",
+                            modifier = Modifier.align(Alignment.Center),
+                            fontSize = 22.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFF5C6BC0),
+                        )
+                        if (!msg.shareCardUrl.isNullOrBlank()) {
+                            IconButton(
+                                onClick = { shareGluciCard(msg) },
+                                modifier = Modifier.align(Alignment.CenterEnd),
+                            ) {
+                                Icon(
+                                    Icons.Filled.Share,
+                                    contentDescription = "Share",
+                                    tint = Color(0xFF5C6BC0),
+                                )
+                            }
+                        }
+                    }
+                    androidx.compose.foundation.lazy.LazyColumn(
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
+                    ) {
+                        item {
+                            FoodResultCard(
+                                score = (msg.score ?: 0.0).toFloat(),
+                                verdict = msg.verdict ?: "",
+                                tip = msg.tip.orEmpty(),
+                                foodName = msg.food?.takeIf { it.isNotBlank() } ?: fallbackFoodTitle(msg.content),
+                                foodImageUrl = msg.mealImageUrl,
+                                curvePoints = msg.glucoseCurve ?: emptyList(),
+                                shareCardUrl = msg.shareCardUrl,
+                                onShare = { shareGluciCard(msg) },
+                                ragAdjusted = msg.ragAdjusted,
+                            )
+                        }
+                    }
+                }
             }
         }
         sharedCard?.let { msg ->
@@ -483,6 +551,7 @@ private fun ChatMessageBubble(
     m: UiMessage,
     onShareCardClick: (String, String?) -> Unit = { _, _ -> },
     shareGluciCard: (UiMessage) -> Unit = {},
+    onCardClick: (UiMessage) -> Unit = {},
 ) {
     val isUser = m.role == "user"
     val time = GluciViewModel.formatMessageTime(m.createdAtMs)
@@ -606,37 +675,8 @@ private fun ChatMessageBubble(
                     .fillMaxWidth()
                     .padding(top = 8.dp),
                 ragAdjusted = m.ragAdjusted,
+                onClick = { onCardClick(m) },
             )
-            if (!m.shareCardUrl.isNullOrBlank()) {
-                Surface(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 6.dp)
-                        .clickable { shareGluciCard(m) },
-                    color = Color(0xFFE91E8C).copy(alpha = 0.09f),
-                    shape = RoundedCornerShape(10.dp),
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.Center,
-                    ) {
-                        Icon(
-                            Icons.Default.Share,
-                            contentDescription = null,
-                            tint = Color(0xFFE91E8C),
-                            modifier = Modifier.size(16.dp),
-                        )
-                        Spacer(Modifier.width(8.dp))
-                        Text(
-                            "Share your Gluci result",
-                            style = MaterialTheme.typography.labelLarge,
-                            color = Color(0xFFE91E8C),
-                            fontWeight = FontWeight.SemiBold,
-                        )
-                    }
-                }
-            }
         } else if (!isUser && m.score != null &&
                    m.glucoseCurve.isNullOrEmpty() &&
                    m.topOrders.isNullOrEmpty() &&
