@@ -494,10 +494,27 @@ export async function handleChatTurn(params: {
           let restaurantResult: Awaited<ReturnType<typeof analyzeRestaurant>>;
           if ("menuUrl" in restaurantQuery) {
             const menuText = await fetchMenuText(restaurantQuery.menuUrl);
-            restaurantResult = await analyzeRestaurant({
-              menuText: menuText ?? `Menu from: ${restaurantQuery.menuUrl}`,
-              profileContext: profileCtx,
-            });
+            const hasContent = menuText && menuText.trim().length > 500;
+            if (hasContent) {
+              restaurantResult = await analyzeRestaurant({
+                menuText,
+                profileContext: profileCtx,
+              });
+            } else {
+              // JS-rendered / sparse page — use web search instead
+              const domain = (() => {
+                try {
+                  return new URL(restaurantQuery.menuUrl).hostname.replace(/^www\./, "");
+                } catch {
+                  return restaurantQuery.menuUrl;
+                }
+              })();
+              foodLabel = domain;
+              restaurantResult = await analyzeRestaurant({
+                restaurantName: `${domain} restaurant menu`,
+                profileContext: profileCtx,
+              });
+            }
           } else {
             foodLabel = restaurantQuery.restaurantName;
             restaurantResult = await analyzeRestaurant({
