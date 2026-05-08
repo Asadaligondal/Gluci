@@ -250,10 +250,14 @@ export async function handleChatTurn(params: {
           mode: "subscription",
           line_items: [{ price: cfg.STRIPE_PRICE_ID, quantity: 1 }],
           customer: customerId,
-          success_url: `${cfg.PUBLIC_BASE_URL}/v1/billing/success?session_id={CHECKOUT_SESSION_ID}`,
+          success_url: `${cfg.PUBLIC_BASE_URL}/v1/billing/success?session_id={CHECKOUT_SESSION_ID}&channel=${params.channel}`,
           cancel_url: `${cfg.PUBLIC_BASE_URL}/v1/billing/cancel`,
           client_reference_id: user.id,
-          metadata: { userId: user.id, channel: params.channel },
+          metadata: {
+            userId: user.id,
+            channel: params.channel,
+            telegramChatId: user.telegramChatId ?? "",
+          },
           allow_promotion_codes: true,
         });
         checkoutUrl = session.url ?? undefined;

@@ -9,6 +9,7 @@ const envSchema = z.object({
   OPENAI_API_KEY: z.string().min(1),
   FREE_DECISIONS_LIMIT: z.coerce.number().default(50),
   TELEGRAM_BOT_TOKEN: z.string().optional(),
+  TELEGRAM_BOT_USERNAME: z.string().optional(),
   WHATSAPP_VERIFY_TOKEN: z.string().optional(),
   WHATSAPP_ACCESS_TOKEN: z.string().optional(),
   WHATSAPP_PHONE_NUMBER_ID: z.string().optional(),

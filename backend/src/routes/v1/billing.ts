@@ -78,15 +78,22 @@ billingRouter.post("/portal", async (req: AuthedRequest, res) => {
   res.json({ url: portal.url });
 });
 
-billingRouter.get("/success", async (_req, res) => {
-  res
-    .type("html")
-    .send(
-      `<html><body style="font-family:system-ui;text-align:center;padding:48px">` +
-        `<h1>Thanks!</h1>` +
-        `<p>Your Gluci subscription is active. You can close this tab and return to the app.</p>` +
-        `</body></html>`,
-    );
+billingRouter.get("/success", async (req, res) => {
+  const cfg = getConfig();
+  const channel = req.query.channel as string | undefined;
+  const botUsername = cfg.TELEGRAM_BOT_USERNAME;
+  const returnBtn =
+    channel === "telegram" && botUsername
+      ? `<a href="https://t.me/${botUsername}" style="display:inline-block;margin-top:24px;padding:14px 28px;background:#5C6BC0;color:white;border-radius:10px;text-decoration:none;font-size:16px;font-weight:600">Return to Gluci on Telegram →</a>`
+      : `<p style="margin-top:24px;color:#666">You can close this tab and return to Gluci.</p>`;
+  res.type("html").send(
+    `<html><body style="font-family:system-ui;text-align:center;padding:48px;max-width:480px;margin:0 auto">` +
+      `<div style="font-size:48px">🎉</div>` +
+      `<h1 style="color:#1A1A1A">You're subscribed!</h1>` +
+      `<p style="color:#555;font-size:16px">Your Gluci subscription is now active. Unlimited food checks, zero limits.</p>` +
+      returnBtn +
+      `</body></html>`,
+  );
 });
 
 billingRouter.get("/cancel", async (_req, res) => {
@@ -172,6 +179,19 @@ export async function handleStripeWebhook(rawBody: Buffer, signature: string | u
           const subId = typeof s.subscription === "string" ? s.subscription : s.subscription.id;
           const sub = await stripe.subscriptions.retrieve(subId);
           await applySubscriptionToUser(sub);
+        }
+        // Notify Telegram user that their subscription is now active
+        const telegramChatId = s.metadata?.telegramChatId;
+        if (telegramChatId) {
+          try {
+            const { sendTelegramMessage } = await import("../../channels/telegram.js");
+            await sendTelegramMessage(
+              telegramChatId,
+              "🎉 You're now subscribed to Gluci!\n\nUnlimited food checks are active. Send me any food photo or question to get started.",
+            );
+          } catch (e) {
+            console.warn("[billing] Telegram subscription confirmation failed:", e);
+          }
         }
         break;
       }
