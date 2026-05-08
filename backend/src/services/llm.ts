@@ -340,7 +340,16 @@ export async function analyzeRestaurant(params: {
           tools: { type: string }[];
           instructions: string;
           input: string;
-        }) => Promise<{ output_text: string }>;
+        }) => Promise<{
+          output_text: string;
+          output: Array<{
+            type: string;
+            content?: Array<{
+              type: string;
+              annotations?: Array<{ type: string; url?: string; title?: string }>;
+            }>;
+          }>;
+        }>;
       };
     };
     const resp = await (openai as unknown as ResponsesAPI).responses.create({
@@ -349,6 +358,15 @@ export async function analyzeRestaurant(params: {
       instructions: RESTAURANT_SYSTEM,
       input: inputText,
     });
+    const sourceUrls: string[] = [];
+    for (const item of resp.output ?? []) {
+      for (const block of item.content ?? []) {
+        for (const ann of block.annotations ?? []) {
+          if (ann.type === "url_citation" && ann.url) sourceUrls.push(ann.url);
+        }
+      }
+    }
+    console.log("[restaurant:sources]", sourceUrls.length > 0 ? sourceUrls.join(" | ") : "(none)");
     rawText = resp.output_text ?? "{}";
   } else {
     const resp = await openai.chat.completions.create({
