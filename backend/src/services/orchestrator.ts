@@ -257,6 +257,7 @@ export async function handleChatTurn(params: {
             userId: user.id,
             channel: params.channel,
             telegramChatId: user.telegramChatId ?? "",
+            whatsappWaId: user.whatsappWaId ?? "",
           },
           allow_promotion_codes: true,
         });

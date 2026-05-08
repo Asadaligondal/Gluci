@@ -82,10 +82,13 @@ billingRouter.get("/success", async (req, res) => {
   const cfg = getConfig();
   const channel = req.query.channel as string | undefined;
   const botUsername = cfg.TELEGRAM_BOT_USERNAME;
+  const waPhone = cfg.WHATSAPP_PHONE_NUMBER_ID;
   const returnBtn =
     channel === "telegram" && botUsername
       ? `<a href="https://t.me/${botUsername}" style="display:inline-block;margin-top:24px;padding:14px 28px;background:#5C6BC0;color:white;border-radius:10px;text-decoration:none;font-size:16px;font-weight:600">Return to Gluci on Telegram →</a>`
-      : `<p style="margin-top:24px;color:#666">You can close this tab and return to Gluci.</p>`;
+      : channel === "whatsapp" && waPhone
+        ? `<a href="https://wa.me/${waPhone}" style="display:inline-block;margin-top:24px;padding:14px 28px;background:#25D366;color:white;border-radius:10px;text-decoration:none;font-size:16px;font-weight:600">Return to Gluci on WhatsApp →</a>`
+        : `<p style="margin-top:24px;color:#666">You can close this tab and return to Gluci.</p>`;
   res.type("html").send(
     `<html><body style="font-family:system-ui;text-align:center;padding:48px;max-width:480px;margin:0 auto">` +
       `<div style="font-size:48px">🎉</div>` +
@@ -191,6 +194,19 @@ export async function handleStripeWebhook(rawBody: Buffer, signature: string | u
             );
           } catch (e) {
             console.warn("[billing] Telegram subscription confirmation failed:", e);
+          }
+        }
+        // Notify WhatsApp user that their subscription is now active
+        const whatsappWaId = s.metadata?.whatsappWaId;
+        if (whatsappWaId) {
+          try {
+            const { sendWhatsAppMessage } = await import("../../channels/whatsapp.js");
+            await sendWhatsAppMessage(
+              whatsappWaId,
+              "🎉 You're now subscribed to Gluci!\n\nUnlimited food checks are active. Send me any food photo or question to get started.",
+            );
+          } catch (e) {
+            console.warn("[billing] WhatsApp subscription confirmation failed:", e);
           }
         }
         break;
