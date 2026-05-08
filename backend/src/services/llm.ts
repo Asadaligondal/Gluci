@@ -28,6 +28,7 @@ export type GluciResponse = {
 
 export type FoodExtraction =
   | { intent: "meal"; foodName: string; ingredients: { name: string; amount: string }[] }
+  | { intent: "menu"; menuText: string }
   | { intent: "chat" };
 
 const EXTRACTION_SYSTEM = `When food is present, output ONLY this JSON:
@@ -39,6 +40,7 @@ const EXTRACTION_SYSTEM = `When food is present, output ONLY this JSON:
   ]
 }
 Be specific with ingredient names.
+If the image is a restaurant/café menu (list of dishes with prices): {"intent":"menu","menuText":"[transcribe all visible dish names and descriptions as plain text]"}
 If no food: { "intent": "chat" }
 Respond ONLY with valid JSON.
 
@@ -411,6 +413,10 @@ export async function analyzeRestaurant(params: {
 
 function parseFoodExtraction(raw: unknown): FoodExtraction {
   const o = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
+  if (o.intent === "menu") {
+    const menuText = typeof o.menuText === "string" ? o.menuText.trim() : "";
+    return { intent: "menu", menuText };
+  }
   const intent = o.intent === "meal" ? "meal" : "chat";
   if (intent !== "meal") return { intent: "chat" };
   const foodName = typeof o.foodName === "string" ? o.foodName.trim() : "";

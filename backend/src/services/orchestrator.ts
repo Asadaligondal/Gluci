@@ -552,7 +552,25 @@ export async function handleChatTurn(params: {
       extraction = { intent: "chat" };
     }
 
-    if (extraction.intent === "meal" && extraction.ingredients.length > 0) {
+    if (extraction.intent === "menu") {
+      try {
+        const menuResult = await analyzeRestaurant({
+          menuText: extraction.menuText,
+          profileContext: profileCtx,
+        });
+        structured = {
+          userReply: menuResult.userReply,
+          glucoseGalScore: menuResult.glucoseGalScore,
+          verdict: menuResult.verdict,
+          intent: "restaurant",
+          countAsDecision: menuResult.countAsDecision,
+          suggestShareCard: false,
+          topOrders: menuResult.topOrders,
+        };
+      } catch (e) {
+        console.warn("[menu-image] analyzeRestaurant failed:", e);
+      }
+    } else if (extraction.intent === "meal" && extraction.ingredients.length > 0) {
       const meal = extraction;
       foodLabel = meal.foodName.trim() || summarizeFoodInput(enriched || llmUserText) || undefined;
 
