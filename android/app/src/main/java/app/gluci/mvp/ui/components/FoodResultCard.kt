@@ -110,7 +110,7 @@ fun FoodResultCard(
         ) {
             // Score (left)
             Column(modifier = Modifier.weight(1f)) {
-                Text("Glucose Score", fontSize = 13.sp, color = Color(0xFF888888))
+                Text("Glucose Score", fontSize = 13.sp, color = Color(0xFF888888), fontWeight = FontWeight.Bold)
                 Spacer(Modifier.height(6.dp))
                 Row(verticalAlignment = Alignment.Bottom) {
                     Text(
@@ -134,7 +134,7 @@ fun FoodResultCard(
                     .background(VerdictInnerBg, RoundedCornerShape(12.dp))
                     .padding(12.dp),
             ) {
-                Text("Verdict", fontSize = 13.sp, color = Color(0xFF888888))
+                Text("Verdict", fontSize = 13.sp, color = Color(0xFF888888), fontWeight = FontWeight.Bold)
                 Spacer(Modifier.height(6.dp))
                 Text(
                     verdict.trim().ifEmpty { "—" },

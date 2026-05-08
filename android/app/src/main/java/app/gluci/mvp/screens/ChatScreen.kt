@@ -92,6 +92,7 @@ import coil.compose.AsyncImage
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.content.Intent
 import android.widget.Toast
 import androidx.compose.ui.platform.LocalContext
 
@@ -326,7 +327,18 @@ fun ChatScreen(
                         )
                         if (!msg.shareCardUrl.isNullOrBlank()) {
                             IconButton(
-                                onClick = { shareGluciCard(msg) },
+                                onClick = {
+                                    val shareText = msg.shareCardUrl ?: msg.shareLandingUrl ?: ""
+                                    ctx.startActivity(
+                                        Intent.createChooser(
+                                            Intent(Intent.ACTION_SEND).apply {
+                                                type = "text/plain"
+                                                putExtra(Intent.EXTRA_TEXT, shareText)
+                                            },
+                                            "Share",
+                                        ),
+                                    )
+                                },
                                 modifier = Modifier.align(Alignment.CenterEnd),
                             ) {
                                 Icon(
