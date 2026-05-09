@@ -347,8 +347,10 @@ export async function analyzeRestaurant(params: {
           output_text: string;
           output: Array<{
             type: string;
+            queries?: string[];
             content?: Array<{
               type: string;
+              text?: string;
               annotations?: Array<{ type: string; url?: string; title?: string }>;
             }>;
           }>;
@@ -361,16 +363,29 @@ export async function analyzeRestaurant(params: {
       instructions: RESTAURANT_SYSTEM,
       input: inputText,
     });
-    const sourceUrls: string[] = [];
+
+    // Log search queries (if exposed by the API)
+    for (const item of resp.output ?? []) {
+      if (item.type === "web_search_call" && item.queries?.length) {
+        console.log(`[restaurant:search-queries] ${item.queries.join(" | ")}`);
+      }
+    }
+
+    // Log source URLs + titles
+    const sources: string[] = [];
     for (const item of resp.output ?? []) {
       for (const block of item.content ?? []) {
         for (const ann of block.annotations ?? []) {
-          if (ann.type === "url_citation" && ann.url) sourceUrls.push(ann.url);
+          if (ann.type === "url_citation" && ann.url) {
+            sources.push(`"${ann.title ?? "no title"}" → ${ann.url}`);
+          }
         }
       }
     }
-    console.log("[restaurant:sources]", sourceUrls.length > 0 ? sourceUrls.join(" | ") : "(none)");
+    console.log(`[restaurant:sources] ${sources.length > 0 ? "\n  " + sources.join("\n  ") : "(none — model may have answered from training data)"}`);
+
     rawText = resp.output_text ?? "{}";
+    console.log(`[restaurant:llm-raw] ${rawText.slice(0, 800)}`);
   } else {
     const resp = await openai.chat.completions.create({
       model: "gpt-4o",
