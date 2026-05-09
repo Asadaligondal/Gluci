@@ -334,6 +334,7 @@ export async function analyzeRestaurant(params: {
   let rawText = "{}";
 
   if (useWebSearch) {
+    console.log(`[restaurant:websearch] searching for: "${params.restaurantName}"`);
     // OpenAI Responses API with built-in web search
     type ResponsesAPI = {
       responses: {
@@ -409,6 +410,48 @@ export async function analyzeRestaurant(params: {
     suggestShareCard: false,
     topOrders,
   };
+}
+
+export async function detectTextIntent(text: string): Promise<{
+  intent: "restaurant" | "meal" | "chat";
+  restaurantName?: string;
+  url?: string;
+}> {
+  const client = getOpenAIClient();
+  const completion = await client.chat.completions.create({
+    model: "gpt-4o-mini",
+    max_tokens: 120,
+    temperature: 0,
+    response_format: { type: "json_object" },
+    messages: [
+      {
+        role: "system",
+        content: `Classify the user message into one intent. Return ONLY valid JSON.
+
+"restaurant": user wants top dish recommendations from a specific restaurant (mentions name, URL, or asks what to order somewhere)
+  → { "intent": "restaurant", "restaurantName": "exact restaurant name", "url": "full url if present, otherwise null" }
+"meal": user describes food they ate or will eat and wants glucose/health analysis
+  → { "intent": "meal" }
+"chat": greeting, general question, or anything else
+  → { "intent": "chat" }`,
+      },
+      { role: "user", content: text.slice(0, 600) },
+    ],
+  });
+  try {
+    const raw = JSON.parse(completion.choices[0]?.message?.content ?? "{}") as Record<string, unknown>;
+    const intent =
+      raw.intent === "restaurant" ? "restaurant"
+      : raw.intent === "meal" ? "meal"
+      : "chat";
+    return {
+      intent,
+      restaurantName: typeof raw.restaurantName === "string" && raw.restaurantName ? raw.restaurantName : undefined,
+      url: typeof raw.url === "string" && raw.url && raw.url !== "null" ? raw.url : undefined,
+    };
+  } catch {
+    return { intent: "chat" };
+  }
 }
 
 function parseFoodExtraction(raw: unknown): FoodExtraction {

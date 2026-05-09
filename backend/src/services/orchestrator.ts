@@ -9,6 +9,7 @@ import {
   generateFoodReply,
   runGluciTurn,
   analyzeRestaurant,
+  detectTextIntent,
 } from "./llm.js";
 import {
   calculateMealGlucose,
@@ -80,60 +81,6 @@ function profileToContext(profile: { goal: string | null; dietaryJson: string | 
   }
 
   return parts.length > 0 ? parts.join("\n") : "(No profile yet—ask onboarding questions if needed.)";
-}
-
-// ── Restaurant detection helpers ─────────────────────────────────────────────
-
-function detectRestaurantQuery(
-  text: string,
-): { restaurantName: string } | { menuUrl: string } | null {
-  const t = text.trim();
-
-  const urlMatch = t.match(/https?:\/\/[^\s]+/);
-  if (urlMatch) return { menuUrl: urlMatch[0] };
-
-  // "ordering/eating/dining at X"
-  const orderAtMatch = t.match(
-    /\b(?:order(?:ing)?|eat(?:ing)?|dine|dining|going|visit(?:ing)?)\b.{0,60}\bat\b\s+([A-Za-z][A-Za-z\s'&]+?)(?:\s*[?,!.\n]|$)/i,
-  );
-  if (orderAtMatch?.[1]) return { restaurantName: orderAtMatch[1].trim() };
-
-  // "menu at X" / "X's menu"
-  const menuAtMatch = t.match(
-    /\bmenu\b.{0,30}\bat\b\s+([A-Za-z][A-Za-z\s'&]+?)(?:\s*[?,!.\n]|$)/i,
-  );
-  if (menuAtMatch?.[1]) return { restaurantName: menuAtMatch[1].trim() };
-
-  const xMenuMatch = t.match(/\b([A-Za-z][A-Za-z\s'&]{2,30}?)\s+menu\b/i);
-  if (xMenuMatch?.[1]) return { restaurantName: xMenuMatch[1].trim() };
-
-  // "at Restaurant" with an ordering/recommendation intent word
-  const simpleAtMatch = t.match(/\bat\s+([A-Z][A-Za-z\s'&]{2,30}?)(?:\s*[?,!.\n]|$)/);
-  if (
-    simpleAtMatch?.[1] &&
-    /\b(?:order|eat|best|dish|recommend|should|what|options|healthy|choose)\b/i.test(t)
-  ) {
-    return { restaurantName: simpleAtMatch[1].trim() };
-  }
-
-  return null;
-}
-
-async function fetchMenuText(url: string): Promise<string | null> {
-  try {
-    const resp = await fetch(url, {
-      signal: AbortSignal.timeout(8000),
-      headers: { "User-Agent": "Mozilla/5.0 (compatible; Gluci/1.0)" },
-    });
-    if (!resp.ok) return null;
-    const html = await resp.text();
-    return html
-      .replace(/<[^>]+>/g, " ")
-      .replace(/\s+/g, " ")
-      .slice(0, 8000);
-  } catch {
-    return null;
-  }
 }
 
 // ── Barcode helpers ──────────────────────────────────────────────────────────
@@ -399,8 +346,11 @@ export async function handleChatTurn(params: {
   let foodLabel: string | undefined;
   let productImageUrl: string | undefined;
 
+  console.log(`[pipeline] userId=${params.userId} channel=${params.channel} hasImage=${Boolean(params.imageBase64)} hasBarcode=${Boolean(params.barcode)} textLen=${(params.text ?? "").length}`);
+
   if (params.barcode) {
     // ── Barcode path ─────────────────────────────────────────────────────────
+    console.log(`[pipeline:barcode] scanning barcode: ${params.barcode}`);
     if (!barcodeProduct) {
       // Not found in Open Food Facts
       structured = {
@@ -488,40 +438,27 @@ export async function handleChatTurn(params: {
     // ── Normal photo / text path ──────────────────────────────────────────────
     let handledAsRestaurant = false;
     if (!params.imageBase64) {
-      const restaurantQuery = detectRestaurantQuery(llmUserText);
-      if (restaurantQuery) {
+      // AI intent detection for text-only messages
+      console.log(`[pipeline] text-only message (${llmUserText.length} chars) — running intent detection`);
+      let textIntent: Awaited<ReturnType<typeof detectTextIntent>>;
+      try {
+        textIntent = await detectTextIntent(llmUserText);
+      } catch (e) {
+        console.warn("[pipeline:intent] detection failed, defaulting to chat:", e);
+        textIntent = { intent: "chat" };
+      }
+      console.log(`[pipeline:intent] → ${textIntent.intent}${textIntent.restaurantName ? ` | name: "${textIntent.restaurantName}"` : ""}${textIntent.url ? ` | url: ${textIntent.url}` : ""}`);
+
+      if (textIntent.intent === "restaurant") {
+        const target = textIntent.url ?? textIntent.restaurantName ?? "unknown";
+        foodLabel = textIntent.restaurantName ?? textIntent.url;
+        console.log(`[restaurant] routing to Responses API web search → target: "${target}"`);
         try {
-          let restaurantResult: Awaited<ReturnType<typeof analyzeRestaurant>>;
-          if ("menuUrl" in restaurantQuery) {
-            const menuText = await fetchMenuText(restaurantQuery.menuUrl);
-            const hasContent = menuText && menuText.trim().length > 500;
-            if (hasContent) {
-              restaurantResult = await analyzeRestaurant({
-                menuText,
-                profileContext: profileCtx,
-              });
-            } else {
-              // JS-rendered / sparse page — use web search instead
-              const domain = (() => {
-                try {
-                  return new URL(restaurantQuery.menuUrl).hostname.replace(/^www\./, "");
-                } catch {
-                  return restaurantQuery.menuUrl;
-                }
-              })();
-              foodLabel = domain;
-              restaurantResult = await analyzeRestaurant({
-                restaurantName: `${domain} restaurant menu`,
-                profileContext: profileCtx,
-              });
-            }
-          } else {
-            foodLabel = restaurantQuery.restaurantName;
-            restaurantResult = await analyzeRestaurant({
-              restaurantName: restaurantQuery.restaurantName,
-              profileContext: profileCtx,
-            });
-          }
+          const restaurantResult = await analyzeRestaurant({
+            restaurantName: target,
+            profileContext: profileCtx,
+          });
+          console.log(`[restaurant] picks returned: ${restaurantResult.topOrders?.map(o => `${o.name} (${o.score})`).join(" | ") ?? "none"}`);
           structured = {
             userReply: restaurantResult.userReply,
             glucoseGalScore: restaurantResult.glucoseGalScore,
@@ -533,9 +470,13 @@ export async function handleChatTurn(params: {
           };
           handledAsRestaurant = true;
         } catch (e) {
-          console.warn("[restaurant] analyzeRestaurant failed, falling through:", e);
+          console.warn("[restaurant] analyzeRestaurant failed, falling through to normal pipeline:", e);
         }
+      } else {
+        console.log(`[pipeline] intent="${textIntent.intent}" → continuing to food/chat pipeline`);
       }
+    } else {
+      console.log("[pipeline] image attached — skipping AI intent detection, going to vision extraction");
     }
 
     if (!handledAsRestaurant) {
@@ -553,11 +494,13 @@ export async function handleChatTurn(params: {
     }
 
     if (extraction.intent === "menu") {
+      console.log(`[pipeline:menu-image] menu image detected — transcribed ${extraction.menuText.length} chars — routing to analyzeRestaurant (chat completions)`);
       try {
         const menuResult = await analyzeRestaurant({
           menuText: extraction.menuText,
           profileContext: profileCtx,
         });
+        console.log(`[pipeline:menu-image] picks: ${menuResult.topOrders?.map(o => `${o.name} (${o.score})`).join(" | ") ?? "none"}`);
         structured = {
           userReply: menuResult.userReply,
           glucoseGalScore: menuResult.glucoseGalScore,
@@ -568,11 +511,12 @@ export async function handleChatTurn(params: {
           topOrders: menuResult.topOrders,
         };
       } catch (e) {
-        console.warn("[menu-image] analyzeRestaurant failed:", e);
+        console.warn("[pipeline:menu-image] analyzeRestaurant failed:", e);
       }
     } else if (extraction.intent === "meal" && extraction.ingredients.length > 0) {
       const meal = extraction;
       foodLabel = meal.foodName.trim() || summarizeFoodInput(enriched || llmUserText) || undefined;
+      console.log(`[pipeline:meal] food="${meal.foodName}" ingredients=${meal.ingredients.length} — classifying curve`);
 
       if (USE_AI_CURVE) {
         const aiResult = await classifyFoodCurve({
@@ -580,6 +524,7 @@ export async function handleChatTurn(params: {
           imageBase64: params.imageBase64,
           mimeType: params.mimeType,
         });
+        console.log(`[pipeline:meal] score=${aiResult.score} category=${aiResult.category} verdict="${aiResult.verdictText}"`);
         structured = {
           userReply: aiResult.message,
           glucoseGalScore: aiResult.score,
@@ -656,6 +601,7 @@ export async function handleChatTurn(params: {
         console.warn("findRelevantKnowledge:", e);
       }
 
+      console.log("[pipeline:chat] no food intent — routing to runGluciTurn");
       structured = await runGluciTurn({
         userText: llmUserText,
         imageBase64: params.imageBase64,
@@ -664,6 +610,7 @@ export async function handleChatTurn(params: {
         profileContext: profileCtx,
         knowledgeContext,
       });
+      console.log(`[pipeline:chat] intent="${structured.intent}" countAsDecision=${structured.countAsDecision}`);
       foodLabel = summarizeFoodInput(enriched || llmUserText) || undefined;
     }
     } // end if (!handledAsRestaurant)
