@@ -335,30 +335,32 @@ export async function analyzeRestaurant(params: {
   let rawText = "{}";
 
   if (useWebSearch) {
-    console.log(`[restaurant:gemini] searching Google for: "${params.restaurantName}"`);
+    console.log(`[restaurant:tavily] searching for: "${params.restaurantName}"`);
     const cfg = getConfig();
-    if (!cfg.GOOGLE_AI_API_KEY) throw new Error("GOOGLE_AI_API_KEY not configured");
+    if (!cfg.TAVILY_API_KEY) throw new Error("TAVILY_API_KEY not configured");
 
-    const genAI = new GoogleGenerativeAI(cfg.GOOGLE_AI_API_KEY);
-    const model = genAI.getGenerativeModel({
-      model: "gemini-2.0-flash",
-      systemInstruction: RESTAURANT_SYSTEM,
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      tools: [{ googleSearch: {} } as any],
+    const tavilyResp = await fetch("https://api.tavily.com/search", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        api_key: cfg.TAVILY_API_KEY,
+        query: `${params.restaurantName} restaurant menu food items`,
+        search_depth: "advanced",
+        include_raw_content: false,
+        max_results: 5,
+      }),
+      signal: AbortSignal.timeout(12000),
     });
 
-    const geminiResult = await model.generateContent(inputText);
-    const candidate = geminiResult.response.candidates?.[0];
-    const groundingMeta = candidate?.groundingMetadata as Record<string, unknown> | undefined;
-    const chunks = (groundingMeta?.groundingChunks as { web?: { uri?: string; title?: string } }[] | undefined) ?? [];
-    const sources = chunks.map(c => `"${c.web?.title ?? "no title"}" → ${c.web?.uri ?? "?"}`).filter(s => !s.includes("?"));
+    if (!tavilyResp.ok) throw new Error(`Tavily error: ${tavilyResp.status}`);
+    const tavilyData = await tavilyResp.json() as { results?: { url: string; content: string; title: string }[] };
+    const results = tavilyData.results ?? [];
+    console.log(`[restaurant:tavily-sources] ${results.length > 0 ? results.map(r => `"${r.title}" → ${r.url}`).join("\n  ") : "(none)"}`);
 
-    console.log(`[restaurant:gemini-sources] ${sources.length > 0 ? "\n  " + sources.join("\n  ") : "(none — Gemini answered from training data, not live search)"}`);
-
-    if (sources.length === 0) {
-      console.warn("[restaurant:gemini] no grounding sources — returning not-found response instead of hallucinated picks");
+    if (results.length === 0) {
+      console.warn("[restaurant:tavily] no results — returning not-found response");
       return {
-        userReply: "I couldn't find the live menu for this restaurant online. Try sharing a photo of the menu or type out a few dishes you're considering.",
+        userReply: "I couldn't find the menu for this restaurant online. Try sharing a photo of the menu or type out a few dishes you're considering.",
         glucoseGalScore: 0,
         verdict: "Not found",
         intent: "restaurant",
@@ -368,8 +370,20 @@ export async function analyzeRestaurant(params: {
       };
     }
 
-    rawText = geminiResult.response.text();
-    console.log(`[restaurant:gemini-raw] ${rawText.slice(0, 800)}`);
+    const menuText = results.map(r => `[${r.title}]\n${r.content}`).join("\n\n").slice(0, 6000);
+    console.log(`[restaurant:tavily-menu-text] ${menuText.slice(0, 400)}...`);
+
+    // Use existing GPT menuText path with the scraped content
+    const gptResp = await openai.chat.completions.create({
+      model: "gpt-4o",
+      max_tokens: 700,
+      messages: [
+        { role: "system", content: RESTAURANT_SYSTEM },
+        { role: "user", content: `Menu content:\n${menuText}\n\nPick the top 3 lowest glucose-impact dishes from this menu.${params.profileContext ? `\n\nUser profile: ${params.profileContext}` : ""}` },
+      ],
+    });
+    rawText = gptResp.choices[0]?.message?.content?.trim() ?? "{}";
+    console.log(`[restaurant:gpt-raw] ${rawText.slice(0, 800)}`);
   } else {
     // Menu image path — text already extracted by vision, no search needed
     const resp = await openai.chat.completions.create({

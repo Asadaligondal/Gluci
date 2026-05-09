@@ -18,6 +18,7 @@ const envSchema = z.object({
   STRIPE_PRICE_ID: z.string().optional(),
   CRON_SECRET: z.string().optional(),
   GOOGLE_AI_API_KEY: z.string().optional(),
+  TAVILY_API_KEY: z.string().optional(),
   FIREBASE_SERVICE_ACCOUNT_JSON: z.string().optional(),
   MARKETING_SITE_URL: z.string().url().optional(),
   SUPABASE_URL: z.string().optional(),
