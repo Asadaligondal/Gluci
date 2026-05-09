@@ -1,4 +1,5 @@
 import OpenAI from "openai";
+import { GoogleGenerativeAI } from "@google/generative-ai";
 import { z } from "zod";
 import { getConfig } from "../config.js";
 import type { KnowledgeResult } from "./knowledgeBase.js";
@@ -334,59 +335,43 @@ export async function analyzeRestaurant(params: {
   let rawText = "{}";
 
   if (useWebSearch) {
-    console.log(`[restaurant:websearch] searching for: "${params.restaurantName}"`);
-    // OpenAI Responses API with built-in web search
-    type ResponsesAPI = {
-      responses: {
-        create: (p: {
-          model: string;
-          tools: { type: string }[];
-          instructions: string;
-          input: string;
-        }) => Promise<{
-          output_text: string;
-          output: Array<{
-            type: string;
-            queries?: string[];
-            content?: Array<{
-              type: string;
-              text?: string;
-              annotations?: Array<{ type: string; url?: string; title?: string }>;
-            }>;
-          }>;
-        }>;
-      };
-    };
-    const resp = await (openai as unknown as ResponsesAPI).responses.create({
-      model: "gpt-4o",
-      tools: [{ type: "web_search_preview" }],
-      instructions: RESTAURANT_SYSTEM,
-      input: inputText,
+    console.log(`[restaurant:gemini] searching Google for: "${params.restaurantName}"`);
+    const cfg = getConfig();
+    if (!cfg.GOOGLE_AI_API_KEY) throw new Error("GOOGLE_AI_API_KEY not configured");
+
+    const genAI = new GoogleGenerativeAI(cfg.GOOGLE_AI_API_KEY);
+    const model = genAI.getGenerativeModel({
+      model: "gemini-2.0-flash",
+      systemInstruction: RESTAURANT_SYSTEM,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      tools: [{ googleSearch: {} } as any],
     });
 
-    // Log search queries (if exposed by the API)
-    for (const item of resp.output ?? []) {
-      if (item.type === "web_search_call" && item.queries?.length) {
-        console.log(`[restaurant:search-queries] ${item.queries.join(" | ")}`);
-      }
+    const geminiResult = await model.generateContent(inputText);
+    const candidate = geminiResult.response.candidates?.[0];
+    const groundingMeta = candidate?.groundingMetadata as Record<string, unknown> | undefined;
+    const chunks = (groundingMeta?.groundingChunks as { web?: { uri?: string; title?: string } }[] | undefined) ?? [];
+    const sources = chunks.map(c => `"${c.web?.title ?? "no title"}" → ${c.web?.uri ?? "?"}`).filter(s => !s.includes("?"));
+
+    console.log(`[restaurant:gemini-sources] ${sources.length > 0 ? "\n  " + sources.join("\n  ") : "(none — Gemini answered from training data, not live search)"}`);
+
+    if (sources.length === 0) {
+      console.warn("[restaurant:gemini] no grounding sources — returning not-found response instead of hallucinated picks");
+      return {
+        userReply: "I couldn't find the live menu for this restaurant online. Try sharing a photo of the menu or type out a few dishes you're considering.",
+        glucoseGalScore: 0,
+        verdict: "Not found",
+        intent: "restaurant",
+        countAsDecision: false,
+        suggestShareCard: false,
+        topOrders: [],
+      };
     }
 
-    // Log source URLs + titles
-    const sources: string[] = [];
-    for (const item of resp.output ?? []) {
-      for (const block of item.content ?? []) {
-        for (const ann of block.annotations ?? []) {
-          if (ann.type === "url_citation" && ann.url) {
-            sources.push(`"${ann.title ?? "no title"}" → ${ann.url}`);
-          }
-        }
-      }
-    }
-    console.log(`[restaurant:sources] ${sources.length > 0 ? "\n  " + sources.join("\n  ") : "(none — model may have answered from training data)"}`);
-
-    rawText = resp.output_text ?? "{}";
-    console.log(`[restaurant:llm-raw] ${rawText.slice(0, 800)}`);
+    rawText = geminiResult.response.text();
+    console.log(`[restaurant:gemini-raw] ${rawText.slice(0, 800)}`);
   } else {
+    // Menu image path — text already extracted by vision, no search needed
     const resp = await openai.chat.completions.create({
       model: "gpt-4o",
       max_tokens: 700,
@@ -396,6 +381,7 @@ export async function analyzeRestaurant(params: {
       ],
     });
     rawText = resp.choices[0]?.message?.content?.trim() ?? "{}";
+    console.log(`[restaurant:menu-image-raw] ${rawText.slice(0, 800)}`);
   }
 
   let parsed: Record<string, unknown> = {};
