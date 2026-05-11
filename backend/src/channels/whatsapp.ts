@@ -250,9 +250,16 @@ export async function handleWhatsAppPayload(body: Record<string, unknown>) {
     channel: "whatsapp",
   });
 
-  const ctaSuffix = out.shareCardUrl
-    ? "\n\n📊 Sending your glucose card below — share it with friends!"
-    : "";
+  // Format restaurant top 3 picks as a readable message
+  if (out.structured.intent === "restaurant" && out.structured.topOrders?.length) {
+    const picks = out.structured.topOrders
+      .map((o, i) => `${i + 1}. ${o.name} — ${o.score}/10\n   💡 ${o.tweaks}`)
+      .join("\n\n");
+    await waSendText(from, `${out.reply}\n\n🍽 Top picks for stable blood sugar:\n\n${picks}`);
+    return;
+  }
+
+  const ctaSuffix = out.shareCardUrl ? "\n\n📊 Sending your glucose card below!" : "";
   await waSendText(from, out.reply + ctaSuffix);
 
   if (out.shareCardUrl) {
@@ -263,11 +270,7 @@ export async function handleWhatsAppPayload(body: Record<string, unknown>) {
     const scoreLabel = out.structured.glucoseGalScore != null ? `Score: ${out.structured.glucoseGalScore}/10` : "";
     const verdictLabel = out.structured.verdict ? ` | ${out.structured.verdict.toUpperCase()}` : "";
     await waSendImage(from, cardUrl, `${scoreLabel}${verdictLabel}`.trim() || "Your Gluci result");
-    if (out.shareLandingUrl) {
-      await waSendText(
-        from,
-        `🔗 Invite a friend to Gluci:\n${out.shareLandingUrl}\n\nThey'll get their first food check free!`,
-      );
-    }
+    const sharePageUrl = `${cfg.PUBLIC_BASE_URL}/share?card=${encodeURIComponent(cardUrl)}`;
+    await waSendText(from, `📤 Share your result:\n${sharePageUrl}`);
   }
 }

@@ -106,6 +106,59 @@ app.get("/r/:ref", async (req, res) => {
 </html>`);
 });
 
+app.get("/share", (req, res) => {
+  const cardUrl = typeof req.query["card"] === "string" ? req.query["card"] : "";
+  const safeCard = cardUrl.startsWith("http") ? cardUrl : cardUrl ? `${cfg.PUBLIC_BASE_URL}${cardUrl.startsWith("/") ? "" : "/"}${cardUrl}` : "";
+  res.type("text/html").send(`<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>My Gluci Result</title>
+  <meta property="og:image" content="${safeCard}"/>
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:system-ui,sans-serif;background:#EDF0FC;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px}
+    .wrap{max-width:420px;width:100%;text-align:center}
+    .logo{font-size:22px;font-weight:700;color:#5C6BC0;margin-bottom:20px}
+    img.card{width:100%;border-radius:16px;box-shadow:0 4px 24px rgba(0,0,0,.12);display:block;margin-bottom:24px}
+    .btn{display:flex;align-items:center;justify-content:center;gap:10px;width:100%;padding:14px;border-radius:12px;font-size:15px;font-weight:600;text-decoration:none;margin-bottom:10px;border:none;cursor:pointer}
+    .btn-native{background:#5C6BC0;color:#fff}
+    .btn-wa{background:#25D366;color:#fff}
+    .btn-copy{background:#fff;color:#333;border:1.5px solid #ddd}
+    .btn-dl{background:#fff;color:#5C6BC0;border:1.5px solid #5C6BC0}
+    .hidden{display:none}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="logo">gluci</div>
+    ${safeCard ? `<img class="card" src="${safeCard}" alt="Gluci result"/>` : ""}
+    <button class="btn btn-native hidden" id="btnShare">📤 Share</button>
+    <a class="btn btn-wa" id="btnWa" href="#">💬 Share on WhatsApp</a>
+    <button class="btn btn-copy" id="btnCopy">🔗 Copy link</button>
+    ${safeCard ? `<a class="btn btn-dl" href="${safeCard}" download="gluci-result.png">⬇️ Download image</a>` : ""}
+  </div>
+  <script>
+    const pageUrl = window.location.href;
+    const cardUrl = "${safeCard}";
+    document.getElementById('btnWa').href = 'https://wa.me/?text=' + encodeURIComponent('Check out my Gluci result! ' + pageUrl);
+    document.getElementById('btnCopy').onclick = () => {
+      navigator.clipboard.writeText(pageUrl).then(() => {
+        document.getElementById('btnCopy').textContent = '✅ Copied!';
+        setTimeout(() => { document.getElementById('btnCopy').textContent = '🔗 Copy link'; }, 2000);
+      });
+    };
+    if (navigator.share) {
+      const btn = document.getElementById('btnShare');
+      btn.classList.remove('hidden');
+      btn.onclick = () => navigator.share({ title: 'My Gluci Result', url: pageUrl });
+    }
+  </script>
+</body>
+</html>`);
+});
+
 app.post("/webhooks/telegram", (req, res) => {
   res.sendStatus(200);
   handleTelegramUpdate(req.body as Record<string, unknown>).catch((e) =>
