@@ -19,22 +19,31 @@ object ApiModule {
             .connectTimeout(15, TimeUnit.SECONDS)
             .readTimeout(15, TimeUnit.SECONDS)
             .build()
-        val doh = DnsOverHttps.Builder()
-            .client(bootstrap)
-            .url("https://1.1.1.1/dns-query".toHttpUrl())
-            .bootstrapDnsHosts(
-                InetAddress.getByName("1.1.1.1"),
-                InetAddress.getByName("1.0.0.1"),
-            )
-            .includeIPv6(false)
-            .build()
+        val doh = try {
+            DnsOverHttps.Builder()
+                .client(bootstrap)
+                .url("https://1.1.1.1/dns-query".toHttpUrl())
+                .bootstrapDnsHosts(
+                    InetAddress.getByName("1.1.1.1"),
+                    InetAddress.getByName("1.0.0.1"),
+                )
+                .includeIPv6(false)
+                .build()
+        } catch (e: Exception) {
+            Log.w("GluciApi", "DoH bootstrap failed, will use system DNS only: ${e.message}")
+            null
+        }
         return object : Dns {
             override fun lookup(hostname: String): List<InetAddress> {
                 return try {
                     Dns.SYSTEM.lookup(hostname)
                 } catch (e: Exception) {
-                    Log.w("GluciApi", "System DNS failed for $hostname, falling back to DoH: ${e.message}")
-                    doh.lookup(hostname)
+                    if (doh != null) {
+                        Log.w("GluciApi", "System DNS failed for $hostname, falling back to DoH: ${e.message}")
+                        doh.lookup(hostname)
+                    } else {
+                        throw e
+                    }
                 }
             }
         }
