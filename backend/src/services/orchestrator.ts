@@ -470,16 +470,7 @@ export async function handleChatTurn(params: {
           };
           handledAsRestaurant = true;
         } catch (e) {
-          console.warn("[restaurant] analyzeRestaurant failed, returning error to user:", e);
-          structured = {
-            userReply: "Sorry, I couldn't look up that restaurant right now. Please try again in a moment, or send a photo of the menu.",
-            glucoseGalScore: 0,
-            verdict: "Error",
-            intent: "restaurant",
-            countAsDecision: false,
-            suggestShareCard: false,
-          };
-          handledAsRestaurant = true;
+          console.warn("[restaurant] analyzeRestaurant failed, falling through to normal pipeline:", e);
         }
       } else {
         console.log(`[pipeline] intent="${textIntent.intent}" → continuing to food/chat pipeline`);
@@ -521,14 +512,6 @@ export async function handleChatTurn(params: {
         };
       } catch (e) {
         console.warn("[pipeline:menu-image] analyzeRestaurant failed:", e);
-        structured = {
-          userReply: "Sorry, I couldn't analyse this menu right now. Please try again.",
-          glucoseGalScore: 0,
-          verdict: "Error",
-          intent: "restaurant",
-          countAsDecision: false,
-          suggestShareCard: false,
-        };
       }
     } else if (extraction.intent === "meal" && extraction.ingredients.length > 0) {
       const meal = extraction;
