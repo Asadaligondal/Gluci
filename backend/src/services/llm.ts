@@ -370,7 +370,19 @@ export async function analyzeRestaurant(params: {
       };
     }
 
-    const menuText = results.map(r => `[${r.title}]\n${r.content}`).join("\n\n").slice(0, 6000);
+    // Filter out results from similarly-named restaurants (e.g. "Ms. Cheezious" when searching for "Cheezious")
+    const nameLower = (params.restaurantName ?? "").toLowerCase();
+    const filteredResults = results.filter(r => {
+      const titleLower = r.title.toLowerCase();
+      const idx = titleLower.indexOf(nameLower);
+      if (idx === -1) return true;
+      // Exclude if the restaurant name is preceded by a word character or honorific — means it's a different place
+      const before = titleLower.slice(0, idx).trim();
+      return !/\w$/.test(before);
+    });
+    const sourceResults = filteredResults.length > 0 ? filteredResults : results;
+
+    const menuText = sourceResults.map(r => `[${r.title}]\n${r.content}`).join("\n\n").slice(0, 6000);
     console.log(`[restaurant:tavily-menu-text] ${menuText.slice(0, 400)}...`);
 
     // Use existing GPT menuText path with the scraped content
@@ -379,7 +391,7 @@ export async function analyzeRestaurant(params: {
       max_tokens: 700,
       messages: [
         { role: "system", content: RESTAURANT_SYSTEM },
-        { role: "user", content: `Menu content:\n${menuText}\n\nPick the top 3 lowest glucose-impact dishes from this menu.${params.profileContext ? `\n\nUser profile: ${params.profileContext}` : ""}` },
+        { role: "user", content: `Restaurant: "${params.restaurantName}"\n\nMenu content from web search:\n${menuText}\n\nIMPORTANT: Only pick dishes that actually appear in the menu content above for "${params.restaurantName}". Ignore any content from similarly-named restaurants.\n\nPick the top 3 lowest glucose-impact dishes.${params.profileContext ? `\n\nUser profile: ${params.profileContext}` : ""}` },
       ],
     });
     rawText = gptResp.choices[0]?.message?.content?.trim() ?? "{}";
