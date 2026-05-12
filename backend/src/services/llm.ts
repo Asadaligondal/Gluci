@@ -344,16 +344,17 @@ export async function analyzeRestaurant(params: {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         api_key: cfg.TAVILY_API_KEY,
-        query: `${params.restaurantName} restaurant menu food items`,
+        query: `${params.restaurantName} restaurant menu dishes list`,
         search_depth: "advanced",
         include_raw_content: false,
+        include_answer: true,
         max_results: 5,
       }),
       signal: AbortSignal.timeout(12000),
     });
 
     if (!tavilyResp.ok) throw new Error(`Tavily error: ${tavilyResp.status}`);
-    const tavilyData = await tavilyResp.json() as { results?: { url: string; content: string; title: string }[] };
+    const tavilyData = await tavilyResp.json() as { results?: { url: string; content: string; title: string }[]; answer?: string };
     const results = tavilyData.results ?? [];
     console.log(`[restaurant:tavily-sources] ${results.length > 0 ? results.map(r => `"${r.title}" → ${r.url}`).join("\n  ") : "(none)"}`);
 
@@ -376,14 +377,17 @@ export async function analyzeRestaurant(params: {
       const titleLower = r.title.toLowerCase();
       const idx = titleLower.indexOf(nameLower);
       if (idx === -1) return true;
-      // Exclude if the restaurant name is preceded by a word character or honorific — means it's a different place
+      // Exclude if the restaurant name is preceded by a word character OR period (catches "Ms.", "Mr." etc.)
       const before = titleLower.slice(0, idx).trim();
-      return !/\w$/.test(before);
+      return !/[\w.]$/.test(before);
     });
     const sourceResults = filteredResults.length > 0 ? filteredResults : results;
 
-    const menuText = sourceResults.map(r => `[${r.title}]\n${r.content}`).join("\n\n").slice(0, 6000);
-    console.log(`[restaurant:tavily-menu-text] ${menuText.slice(0, 400)}...`);
+    // Prepend Tavily's AI-extracted answer if available — it tends to list actual dishes
+    const answerSection = tavilyData.answer ? `[Menu Summary]\n${tavilyData.answer}\n\n` : "";
+    const menuText = answerSection + sourceResults.map(r => `[${r.title}]\n${r.content}`).join("\n\n");
+    const menuTextTrimmed = menuText.slice(0, 6000);
+    console.log(`[restaurant:tavily-menu-text] ${menuTextTrimmed.slice(0, 400)}...`);
 
     // Use existing GPT menuText path with the scraped content
     const gptResp = await openai.chat.completions.create({
@@ -391,7 +395,7 @@ export async function analyzeRestaurant(params: {
       max_tokens: 700,
       messages: [
         { role: "system", content: RESTAURANT_SYSTEM },
-        { role: "user", content: `Restaurant: "${params.restaurantName}"\n\nMenu content from web search:\n${menuText}\n\nIMPORTANT: Only pick dishes that actually appear in the menu content above for "${params.restaurantName}". Ignore any content from similarly-named restaurants.\n\nPick the top 3 lowest glucose-impact dishes.${params.profileContext ? `\n\nUser profile: ${params.profileContext}` : ""}` },
+        { role: "user", content: `Restaurant: "${params.restaurantName}"\n\nMenu content from web search:\n${menuTextTrimmed}\n\nIMPORTANT: Only pick dishes that actually appear in the menu content above for "${params.restaurantName}". Ignore any content from similarly-named restaurants.\n\nPick the top 3 lowest glucose-impact dishes.${params.profileContext ? `\n\nUser profile: ${params.profileContext}` : ""}` },
       ],
     });
     rawText = gptResp.choices[0]?.message?.content?.trim() ?? "{}";
