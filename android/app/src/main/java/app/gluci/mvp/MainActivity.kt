@@ -1,6 +1,7 @@
 package app.gluci.mvp
 
 import android.Manifest
+import android.content.Intent
 import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -44,6 +45,14 @@ class MainActivity : ComponentActivity() {
         sessionVm?.refreshBilling()
         sessionVm?.refreshUsage()
         sessionVm?.refreshSummaries()
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        if (intent.data?.scheme == "gluci" && intent.data?.host == "billing") {
+            sessionVm?.dismissPaywall()
+            sessionVm?.refreshBilling()
+        }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {

@@ -572,7 +572,7 @@ class GluciViewModel(app: Application) : AndroidViewModel(app) {
                     ragAdjusted = out.ragAdjusted,
                     topOrders = out.topOrders,
                 )
-                handlePaywall(out.paywall?.checkoutUrl)
+                handlePaywall(out.paywall)
                 refreshConversations()
                 refreshUsage()
                 refreshBilling()
@@ -634,7 +634,7 @@ class GluciViewModel(app: Application) : AndroidViewModel(app) {
                     ragAdjusted = out.ragAdjusted,
                     topOrders = out.topOrders,
                 )
-                handlePaywall(out.paywall?.checkoutUrl)
+                handlePaywall(out.paywall)
                 refreshConversations()
                 refreshUsage()
                 refreshBilling()
@@ -683,7 +683,7 @@ class GluciViewModel(app: Application) : AndroidViewModel(app) {
                     ragAdjusted = out.ragAdjusted,
                     topOrders = out.topOrders,
                 )
-                handlePaywall(out.paywall?.checkoutUrl)
+                handlePaywall(out.paywall)
                 refreshConversations()
                 refreshUsage()
                 refreshBilling()
@@ -697,9 +697,9 @@ class GluciViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    private fun handlePaywall(url: String?) {
-        if (url != null) {
-            _paywallUrl.value = url
+    private fun handlePaywall(paywall: app.gluci.mvp.data.PaywallInfo?) {
+        if (paywall != null) {
+            _paywallUrl.value = paywall.checkoutUrl
             _showPaywall.value = true
         }
     }

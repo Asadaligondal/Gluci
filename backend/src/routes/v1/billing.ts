@@ -56,7 +56,7 @@ billingRouter.post("/checkout", async (req: AuthedRequest, res) => {
     mode: "subscription",
     line_items: [{ price: cfg.STRIPE_PRICE_ID, quantity: 1 }],
     customer: customerId,
-    success_url: `${cfg.PUBLIC_BASE_URL}/v1/billing/success?session_id={CHECKOUT_SESSION_ID}`,
+    success_url: `${cfg.PUBLIC_BASE_URL}/v1/billing/success?session_id={CHECKOUT_SESSION_ID}&channel=app`,
     cancel_url: `${cfg.PUBLIC_BASE_URL}/v1/billing/cancel`,
     client_reference_id: userId,
     metadata: { userId },
@@ -83,14 +83,22 @@ billingRouter.get("/success", async (req, res) => {
   const channel = req.query.channel as string | undefined;
   const botUsername = cfg.TELEGRAM_BOT_USERNAME;
   const waPhone = cfg.WHATSAPP_PHONE_NUMBER_ID;
-  const returnBtn =
-    channel === "telegram" && botUsername
-      ? `<a href="https://t.me/${botUsername}" style="display:inline-block;margin-top:24px;padding:14px 28px;background:#5C6BC0;color:white;border-radius:10px;text-decoration:none;font-size:16px;font-weight:600">Return to Gluci on Telegram →</a>`
-      : channel === "whatsapp" && waPhone
-        ? `<a href="https://wa.me/${waPhone}" style="display:inline-block;margin-top:24px;padding:14px 28px;background:#25D366;color:white;border-radius:10px;text-decoration:none;font-size:16px;font-weight:600">Return to Gluci on WhatsApp →</a>`
-        : `<p style="margin-top:24px;color:#666">You can close this tab and return to Gluci.</p>`;
+
+  let redirectUrl: string | null = null;
+  if (channel === "telegram" && botUsername) redirectUrl = `https://t.me/${botUsername}`;
+  else if (channel === "whatsapp" && waPhone) redirectUrl = `https://wa.me/${waPhone}`;
+  else if (channel === "app") redirectUrl = "gluci://billing/success";
+
+  const autoRedirect = redirectUrl
+    ? `<script>setTimeout(function(){ window.location.replace(${JSON.stringify(redirectUrl)}); }, 2000);</script>`
+    : "";
+
+  const returnBtn = redirectUrl
+    ? `<a href="${redirectUrl}" style="display:inline-block;margin-top:24px;padding:14px 28px;background:#5C6BC0;color:white;border-radius:10px;text-decoration:none;font-size:16px;font-weight:600">Return to Gluci →</a>`
+    : `<p style="margin-top:24px;color:#666">You can close this tab and return to Gluci.</p>`;
+
   res.type("html").send(
-    `<html><body style="font-family:system-ui;text-align:center;padding:48px;max-width:480px;margin:0 auto">` +
+    `<html><head>${autoRedirect}</head><body style="font-family:system-ui;text-align:center;padding:48px;max-width:480px;margin:0 auto">` +
       `<div style="font-size:48px">🎉</div>` +
       `<h1 style="color:#1A1A1A">You're subscribed!</h1>` +
       `<p style="color:#555;font-size:16px">Your Gluci subscription is now active. Unlimited food checks, zero limits.</p>` +
