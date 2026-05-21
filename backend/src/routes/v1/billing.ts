@@ -90,11 +90,11 @@ billingRouter.get("/success", async (req, res) => {
   else if (channel === "app") redirectUrl = "gluci://billing/success";
 
   const autoRedirect = redirectUrl
-    ? `<script>setTimeout(function(){ window.location.replace(${JSON.stringify(redirectUrl)}); }, 2000);</script>`
+    ? `<script>setTimeout(function(){ var a=document.getElementById('rtn'); if(a) a.click(); }, 1500);</script>`
     : "";
 
   const returnBtn = redirectUrl
-    ? `<a href="${redirectUrl}" style="display:inline-block;margin-top:24px;padding:14px 28px;background:#5C6BC0;color:white;border-radius:10px;text-decoration:none;font-size:16px;font-weight:600">Return to Gluci →</a>`
+    ? `<a id="rtn" href="${redirectUrl}" style="display:inline-block;margin-top:24px;padding:14px 28px;background:#5C6BC0;color:white;border-radius:10px;text-decoration:none;font-size:16px;font-weight:600">Return to Gluci →</a>`
     : `<p style="margin-top:24px;color:#666">You can close this tab and return to Gluci.</p>`;
 
   res.type("html").send(
