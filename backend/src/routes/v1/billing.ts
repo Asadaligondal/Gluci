@@ -8,6 +8,9 @@ import { logAnalytics } from "../../services/analytics.js";
 export const billingRouter = Router();
 billingRouter.use(authAppBearer);
 
+// ── Public redirect pages (no auth — Stripe opens these in a browser) ─────────
+export const billingPublicRouter = Router();
+
 function stripeOrNull() {
   const cfg = getConfig();
   if (!cfg.STRIPE_SECRET_KEY) return null;
@@ -78,7 +81,7 @@ billingRouter.post("/portal", async (req: AuthedRequest, res) => {
   res.json({ url: portal.url });
 });
 
-billingRouter.get("/success", async (req, res) => {
+billingPublicRouter.get("/success", async (req, res) => {
   const cfg = getConfig();
   const channel = req.query.channel as string | undefined;
   const botUsername = cfg.TELEGRAM_BOT_USERNAME;
@@ -107,7 +110,7 @@ billingRouter.get("/success", async (req, res) => {
   );
 });
 
-billingRouter.get("/cancel", async (_req, res) => {
+billingPublicRouter.get("/cancel", async (_req, res) => {
   res
     .type("html")
     .send(
@@ -117,7 +120,7 @@ billingRouter.get("/cancel", async (_req, res) => {
     );
 });
 
-billingRouter.get("/return", async (_req, res) => {
+billingPublicRouter.get("/return", async (_req, res) => {
   res
     .type("html")
     .send(
@@ -152,6 +155,19 @@ async function applySubscriptionToUser(sub: Stripe.Subscription) {
       subscriptionCancelAtPeriodEnd: sub.cancel_at_period_end ?? false,
     },
   });
+}
+
+export async function createBillingPortalUrl(userId: string, returnUrl: string): Promise<string | null> {
+  const cfg = getConfig();
+  const stripe = stripeOrNull();
+  if (!stripe) return null;
+  try {
+    const customerId = await ensureStripeCustomer(stripe, userId);
+    const portal = await stripe.billingPortal.sessions.create({ customer: customerId, return_url: returnUrl });
+    return portal.url;
+  } catch {
+    return null;
+  }
 }
 
 /** Stripe webhook — raw body handled in index */

@@ -5,6 +5,7 @@ import { handleChatTurn } from "../services/orchestrator.js";
 import { getOrCreateChannelConversation } from "../services/conversationService.js";
 import { tryLinkWhatsAppByCode } from "../services/linking.js";
 import { getPendingSetup, setPendingSetup, saveGoal, saveDietaryField } from "../services/profileService.js";
+import { createBillingPortalUrl } from "../routes/v1/billing.js";
 
 const processedMsgIds = new Set<string>();
 
@@ -13,6 +14,7 @@ const WA_COMMANDS =
   "SET GOAL — update your health goal\n" +
   "SET ALLERGIES — update allergies or foods to avoid\n" +
   "SET DIET — update dietary preferences\n" +
+  "MANAGE SUB — manage or cancel your subscription\n" +
   "STOP — mute nudges\n" +
   "NOTIFY — resume daily nudges\n" +
   "NUDGE LESS — nudge every 3 days\n" +
@@ -178,6 +180,15 @@ export async function handleWhatsAppPayload(body: Record<string, unknown>) {
   if (low === "set diet") {
     await setPendingSetup(user.id, "diet");
     await waSendText(from, Q_DIET);
+    return;
+  }
+  if (low === "manage sub") {
+    const cfg = getConfig();
+    const returnUrl = cfg.WHATSAPP_PHONE_NUMBER_ID ? `https://wa.me/${cfg.WHATSAPP_PHONE_NUMBER_ID}` : cfg.PUBLIC_BASE_URL;
+    const portalUrl = await createBillingPortalUrl(user.id, returnUrl);
+    await waSendText(from, portalUrl
+      ? `Manage your Gluci subscription here:\n${portalUrl}`
+      : "Billing portal is not available yet. Contact support if you need to cancel.");
     return;
   }
 

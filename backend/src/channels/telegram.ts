@@ -5,6 +5,7 @@ import { handleChatTurn } from "../services/orchestrator.js";
 import { getOrCreateChannelConversation } from "../services/conversationService.js";
 import { tryLinkTelegramByCode } from "../services/linking.js";
 import { getPendingSetup, setPendingSetup, saveGoal, saveDietaryField } from "../services/profileService.js";
+import { createBillingPortalUrl } from "../routes/v1/billing.js";
 
 const TG_API = "https://api.telegram.org";
 
@@ -20,6 +21,7 @@ const TG_COMMANDS =
   "/setgoal — update your health goal\n" +
   "/setallergies — update allergies or foods to avoid\n" +
   "/setdiet — update dietary preferences\n" +
+  "/managesub — manage or cancel your subscription\n" +
   "/stop — mute nudges\n" +
   "/notify — resume daily nudges\n" +
   "/nudge_less — nudge every 3 days\n" +
@@ -140,6 +142,15 @@ export async function handleTelegramUpdate(update: Record<string, unknown>) {
   if (/^\/setdiet(?:@\w+)?$/i.test(text)) {
     await setPendingSetup(user.id, "diet");
     await sendTelegramMessage(chatId, Q_DIET);
+    return;
+  }
+  if (/^\/managesub(?:@\w+)?$/i.test(text)) {
+    const cfg = getConfig();
+    const returnUrl = cfg.TELEGRAM_BOT_USERNAME ? `https://t.me/${cfg.TELEGRAM_BOT_USERNAME}` : cfg.PUBLIC_BASE_URL;
+    const portalUrl = await createBillingPortalUrl(user.id, returnUrl);
+    await sendTelegramMessage(chatId, portalUrl
+      ? `Manage your Gluci subscription here:\n${portalUrl}`
+      : "Billing portal is not available yet. Contact support if you need to cancel.");
     return;
   }
 
