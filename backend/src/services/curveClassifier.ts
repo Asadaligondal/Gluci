@@ -27,7 +27,7 @@ Categories:
 Curve parameter guidance:
 - peakTime (minutes to peak): liquid/sugar=15-25, refined carbs=25-40, mixed meals=40-60, high fat/fiber=55-80
 - peakMgDl (mg/dL rise above baseline): SEVERE=65-85, HIGH=45-65, MODERATE=25-45, LOW=12-28, MINIMAL=3-12
-- decayHalfLife (minutes to drop to half after peak): fast crash=20-35, moderate=35-55, slow=55-75
+- decayHalfLife (minutes to halve after peak): SEVERE=30-40, HIGH=40-55, MODERATE=50-65, LOW=60-75, MINIMAL=65-75. NEVER below 30. Glucose takes 90-120 min from the meal to return to baseline — if peak is at 30 min, decay must cover 60-90 more minutes, so half-life cannot be short. Fat and protein slow decay further as they prolong gastric emptying.
 - Adjust peakTime UP and peakMgDl DOWN if the meal is high in fat, fiber, or protein
 
 Reply ONLY with a JSON object, no markdown:
@@ -111,9 +111,9 @@ export async function classifyFoodCurve(params: {
   const tip = typeof parsed.tip === "string" ? parsed.tip.trim() : "";
   const message = typeof parsed.message === "string" ? parsed.message.trim() : "";
 
-  const gptPeakTime = typeof parsed.peakTime === "number" ? parsed.peakTime : null;
-  const gptPeakMgDl = typeof parsed.peakMgDl === "number" ? parsed.peakMgDl : null;
-  const gptDecayHalfLife = typeof parsed.decayHalfLife === "number" ? parsed.decayHalfLife : null;
+  const gptPeakTime = typeof parsed.peakTime === "number" ? Math.max(10, parsed.peakTime) : null;
+  const gptPeakMgDl = typeof parsed.peakMgDl === "number" ? Math.max(3, parsed.peakMgDl) : null;
+  const gptDecayHalfLife = typeof parsed.decayHalfLife === "number" ? Math.max(30, parsed.decayHalfLife) : null;
 
   const curvePoints =
     gptPeakTime !== null && gptPeakMgDl !== null && gptDecayHalfLife !== null
