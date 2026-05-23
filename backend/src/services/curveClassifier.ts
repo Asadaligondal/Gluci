@@ -15,7 +15,7 @@ export type CurveClassification = {
 
 const CLASSIFICATION_PROMPT = `You are a clinical nutritionist and glucose response expert.
 
-Given a food name and optional image, classify the food's glycemic impact and estimate its glucose curve parameters.
+Given a food name and optional image, classify the food's glycemic impact and estimate macronutrients for a typical single serving.
 
 Categories:
 - SEVERE: Very high GI foods (white bread, candy, soda, fried dough, sugary cereals). Score 1.0–3.5.
@@ -24,10 +24,17 @@ Categories:
 - LOW: Low GI foods (legumes, oats, most vegetables, Greek yogurt, nuts with carbs). Score 7.5–8.5.
 - MINIMAL: Very low GI (eggs, meat, fish, pure fat, leafy greens, cheese, water). Score 8.5–10.
 
-Curve parameter guidance:
+Macronutrient estimates (typical single serving, in grams):
+- carbs: total carbohydrates including sugars
+- fiber: dietary fiber (subset of carbs)
+- fat: total fat
+- protein: total protein
+- nutrientConfidence: "high" if food is well-known, "medium" if estimating, "low" if very uncertain
+
+Curve parameter guidance (fallback if nutrientConfidence is "low"):
 - peakTime (minutes to peak): liquid/sugar=15-25, refined carbs=25-40, mixed meals=40-60, high fat/fiber=55-80
 - peakMgDl (mg/dL rise above baseline): SEVERE=65-85, HIGH=45-65, MODERATE=25-45, LOW=12-28, MINIMAL=3-12
-- decayHalfLife (minutes to halve after peak): SEVERE=30-40, HIGH=40-55, MODERATE=50-65, LOW=60-75, MINIMAL=65-75. NEVER below 30. Glucose takes 90-120 min from the meal to return to baseline — if peak is at 30 min, decay must cover 60-90 more minutes, so half-life cannot be short. Fat and protein slow decay further as they prolong gastric emptying.
+- decayHalfLife (minutes to halve after peak): SEVERE=30-40, HIGH=40-55, MODERATE=50-65, LOW=60-75, MINIMAL=65-75. NEVER below 30. Glucose takes 90-120 min from the meal to return to baseline. Fat and protein slow decay further.
 - Adjust peakTime UP and peakMgDl DOWN if the meal is high in fat, fiber, or protein
 
 Reply ONLY with a JSON object, no markdown:
@@ -38,10 +45,27 @@ Reply ONLY with a JSON object, no markdown:
   "verdictText": "<1–3 word label>",
   "tip": "<one actionable sentence>",
   "message": "<2–3 sentence reply explaining glucose impact in simple terms>",
+  "carbs": <grams>,
+  "fiber": <grams>,
+  "fat": <grams>,
+  "protein": <grams>,
+  "nutrientConfidence": "high|medium|low",
   "peakTime": <integer minutes>,
   "peakMgDl": <integer mg/dL>,
   "decayHalfLife": <integer minutes>
 }`;
+
+function nutrientsToParams(n: { carbs: number; fiber: number; fat: number; protein: number }): {
+  peakTime: number;
+  peakMgDl: number;
+  decayHalfLife: number;
+} {
+  const netCarbs = Math.max(0, n.carbs - n.fiber);
+  const peakTime = Math.round(Math.min(90, Math.max(15, 30 + n.fiber * 2 + n.fat * 1.5 + n.protein * 0.5)));
+  const peakMgDl = Math.round(Math.min(100, Math.max(3, netCarbs * 1.5 - n.fat * 0.3)));
+  const decayHalfLife = Math.round(Math.min(90, Math.max(30, 45 + n.fat * 1.0 + n.protein * 0.5 + n.fiber * 0.5)));
+  return { peakTime, peakMgDl, decayHalfLife };
+}
 
 export async function classifyFoodCurve(params: {
   foodName: string;
@@ -63,7 +87,7 @@ export async function classifyFoodCurve(params: {
 
   const response = await openai.chat.completions.create({
     model: "gpt-4o",
-    max_tokens: 500,
+    max_tokens: 600,
     messages: [
       { role: "system", content: CLASSIFICATION_PROMPT },
       { role: "user", content: userContent as never },
@@ -78,6 +102,11 @@ export async function classifyFoodCurve(params: {
     verdictText?: string;
     tip?: string;
     message?: string;
+    carbs?: unknown;
+    fiber?: unknown;
+    fat?: unknown;
+    protein?: unknown;
+    nutrientConfidence?: string;
     peakTime?: unknown;
     peakMgDl?: unknown;
     decayHalfLife?: unknown;
@@ -111,14 +140,31 @@ export async function classifyFoodCurve(params: {
   const tip = typeof parsed.tip === "string" ? parsed.tip.trim() : "";
   const message = typeof parsed.message === "string" ? parsed.message.trim() : "";
 
+  // Step 3: nutrient-based math model (preferred)
+  const carbs = typeof parsed.carbs === "number" ? Math.max(0, parsed.carbs) : null;
+  const fiber = typeof parsed.fiber === "number" ? Math.max(0, parsed.fiber) : null;
+  const fat = typeof parsed.fat === "number" ? Math.max(0, parsed.fat) : null;
+  const protein = typeof parsed.protein === "number" ? Math.max(0, parsed.protein) : null;
+  const nutrientConfidence = parsed.nutrientConfidence;
+  const hasNutrients = carbs !== null && fiber !== null && fat !== null && protein !== null;
+  const mathParams =
+    hasNutrients && (nutrientConfidence === "high" || nutrientConfidence === "medium")
+      ? nutrientsToParams({ carbs: carbs!, fiber: fiber!, fat: fat!, protein: protein! })
+      : null;
+
+  // Step 2 fallback: GPT direct params
   const gptPeakTime = typeof parsed.peakTime === "number" ? Math.max(10, parsed.peakTime) : null;
   const gptPeakMgDl = typeof parsed.peakMgDl === "number" ? Math.max(3, parsed.peakMgDl) : null;
   const gptDecayHalfLife = typeof parsed.decayHalfLife === "number" ? Math.max(30, parsed.decayHalfLife) : null;
-
-  const curvePoints =
+  const gptParams =
     gptPeakTime !== null && gptPeakMgDl !== null && gptDecayHalfLife !== null
-      ? renderCurveFromParams({ peakTime: gptPeakTime, peakMgDl: gptPeakMgDl, decayHalfLife: gptDecayHalfLife })
-      : generateCurvePoints(category);
+      ? { peakTime: gptPeakTime, peakMgDl: gptPeakMgDl, decayHalfLife: gptDecayHalfLife }
+      : null;
+
+  const finalParams = mathParams ?? gptParams;
+  const curvePoints = finalParams !== null
+    ? renderCurveFromParams(finalParams)
+    : generateCurvePoints(category);
 
   return {
     category,
