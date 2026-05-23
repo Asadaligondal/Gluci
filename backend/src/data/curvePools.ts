@@ -17,8 +17,18 @@ const CATEGORY_PARAMS: Record<CurveCategory, CategoryParams> = {
   MINIMAL:  { peakTime: 70, peakMgDl:  8, decayHalfLife: 60, secondaryBump: false },
 };
 
-export function generateCurvePoints(category: CurveCategory): CurvePoint[] {
-  const { peakTime, peakMgDl, decayHalfLife, secondaryBump } = CATEGORY_PARAMS[category];
+export function renderCurveFromParams(p: {
+  peakTime: number;
+  peakMgDl: number;
+  decayHalfLife: number;
+  secondaryBump?: boolean;
+}): CurvePoint[] {
+  return generateCurvePoints("MODERATE", p);
+}
+
+export function generateCurvePoints(category: CurveCategory, override?: Partial<CategoryParams>): CurvePoint[] {
+  const base = CATEGORY_PARAMS[category];
+  const { peakTime, peakMgDl, decayHalfLife, secondaryBump } = { ...base, ...override };
   const decayK = Math.LN2 / decayHalfLife;
   const points: CurvePoint[] = [];
 

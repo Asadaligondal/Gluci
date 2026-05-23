@@ -1,5 +1,5 @@
 import { getOpenAIClient } from "./llm.js";
-import { generateCurvePoints, type CurveCategory } from "../data/curvePools.js";
+import { generateCurvePoints, renderCurveFromParams, type CurveCategory } from "../data/curvePools.js";
 import type { CurvePoint } from "./shareCard.js";
 
 export type CurveClassification = {
@@ -15,21 +15,32 @@ export type CurveClassification = {
 
 const CLASSIFICATION_PROMPT = `You are a clinical nutritionist and glucose response expert.
 
-Given a food name and optional image, classify the food's glycemic impact into one of these categories:
+Given a food name and optional image, classify the food's glycemic impact and estimate its glucose curve parameters.
+
+Categories:
 - SEVERE: Very high GI foods (white bread, candy, soda, fried dough, sugary cereals). Score 1.0–3.5.
 - HIGH: High GI foods (white rice, regular pasta, pizza, burgers, fries, juice). Score 3.5–5.5.
 - MODERATE: Medium GI foods (whole grain bread, basmati rice, sweet potato, fruit). Score 5.5–7.5.
 - LOW: Low GI foods (legumes, oats, most vegetables, Greek yogurt, nuts with carbs). Score 7.5–8.5.
 - MINIMAL: Very low GI (eggs, meat, fish, pure fat, leafy greens, cheese, water). Score 8.5–10.
 
+Curve parameter guidance:
+- peakTime (minutes to peak): liquid/sugar=15-25, refined carbs=25-40, mixed meals=40-60, high fat/fiber=55-80
+- peakMgDl (mg/dL rise above baseline): SEVERE=65-85, HIGH=45-65, MODERATE=25-45, LOW=12-28, MINIMAL=3-12
+- decayHalfLife (minutes to drop to half after peak): fast crash=20-35, moderate=35-55, slow=55-75
+- Adjust peakTime UP and peakMgDl DOWN if the meal is high in fat, fiber, or protein
+
 Reply ONLY with a JSON object, no markdown:
 {
   "category": "SEVERE|HIGH|MODERATE|LOW|MINIMAL",
   "score": <number 1.0–10.0, one decimal>,
   "verdict": "eat|modify|avoid",
-  "verdictText": "<1–3 word label, e.g. 'Avoid', 'Eat Freely', 'Modify Portion'>",
-  "tip": "<one actionable sentence to improve the glucose response, e.g. add protein, pair with vinegar>",
-  "message": "<2–3 sentence conversational reply explaining the glucose impact in simple terms>"
+  "verdictText": "<1–3 word label>",
+  "tip": "<one actionable sentence>",
+  "message": "<2–3 sentence reply explaining glucose impact in simple terms>",
+  "peakTime": <integer minutes>,
+  "peakMgDl": <integer mg/dL>,
+  "decayHalfLife": <integer minutes>
 }`;
 
 export async function classifyFoodCurve(params: {
@@ -52,7 +63,7 @@ export async function classifyFoodCurve(params: {
 
   const response = await openai.chat.completions.create({
     model: "gpt-4o",
-    max_tokens: 400,
+    max_tokens: 500,
     messages: [
       { role: "system", content: CLASSIFICATION_PROMPT },
       { role: "user", content: userContent as never },
@@ -67,6 +78,9 @@ export async function classifyFoodCurve(params: {
     verdictText?: string;
     tip?: string;
     message?: string;
+    peakTime?: unknown;
+    peakMgDl?: unknown;
+    decayHalfLife?: unknown;
   } = {};
 
   try {
@@ -97,7 +111,14 @@ export async function classifyFoodCurve(params: {
   const tip = typeof parsed.tip === "string" ? parsed.tip.trim() : "";
   const message = typeof parsed.message === "string" ? parsed.message.trim() : "";
 
-  const curvePoints = generateCurvePoints(category);
+  const gptPeakTime = typeof parsed.peakTime === "number" ? parsed.peakTime : null;
+  const gptPeakMgDl = typeof parsed.peakMgDl === "number" ? parsed.peakMgDl : null;
+  const gptDecayHalfLife = typeof parsed.decayHalfLife === "number" ? parsed.decayHalfLife : null;
+
+  const curvePoints =
+    gptPeakTime !== null && gptPeakMgDl !== null && gptDecayHalfLife !== null
+      ? renderCurveFromParams({ peakTime: gptPeakTime, peakMgDl: gptPeakMgDl, decayHalfLife: gptDecayHalfLife })
+      : generateCurvePoints(category);
 
   return {
     category,
