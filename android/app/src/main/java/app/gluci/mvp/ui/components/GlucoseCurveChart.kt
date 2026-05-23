@@ -43,7 +43,14 @@ fun GlucoseCurveChart(
     modifier: Modifier = Modifier,
 ) {
     val peakPt = remember(curvePoints) { curvePoints.maxByOrNull { it.mgDl } }
-    val peakFraction = remember(peakPt) { (peakPt?.minute?.toFloat() ?: 90f) / 180f }
+    val xMax = remember(curvePoints) {
+        val peakVal = curvePoints.maxOfOrNull { it.mgDl }?.toFloat() ?: 0f
+        val threshold = maxOf(peakVal * 0.1f, 5f)
+        val lastAbove = curvePoints.filter { it.mgDl >= threshold }.maxOfOrNull { it.minute } ?: 120
+        val rounded = ((lastAbove + 29) / 30) * 30
+        rounded.coerceIn(90, 180)
+    }
+    val peakFraction = remember(peakPt, xMax) { (peakPt?.minute?.toFloat() ?: (xMax / 2f)) / xMax.toFloat() }
 
     Column(
         modifier = modifier
@@ -125,16 +132,16 @@ fun GlucoseCurveChart(
                     val actualMax = curvePoints.maxOf { it.mgDl }.toFloat()
                     val scaleCeiling = maxOf(actualMax * 1.15f, 20f)
 
-                    val sorted = curvePoints.sortedBy { it.minute }
+                    val sorted = curvePoints.filter { it.minute <= xMax }.sortedBy { it.minute }
                     val pts = sorted.map { pt ->
                         Offset(
-                            x = (pt.minute.toFloat() / 180f) * w,
+                            x = (pt.minute.toFloat() / xMax.toFloat()) * w,
                             y = h - bottomPad - (pt.mgDl.toFloat() / scaleCeiling) * drawH,
                         )
                     }
 
                     val pPt = curvePoints.maxByOrNull { it.mgDl }!!
-                    val peakX = (pPt.minute.toFloat() / 180f) * w
+                    val peakX = (pPt.minute.toFloat() / xMax.toFloat()) * w
                     val peakY = h - bottomPad - (pPt.mgDl.toFloat() / scaleCeiling) * drawH
 
                     // Fill
@@ -218,8 +225,8 @@ fun GlucoseCurveChart(
                 Text("Peak", fontSize = 12.sp, color = CurvePurple, fontWeight = FontWeight.Medium)
             }
             Column(Modifier.align(Alignment.TopEnd), horizontalAlignment = Alignment.End) {
-                Text("+120m", fontSize = 13.sp, fontWeight = FontWeight.Medium, color = Color(0xFF666666))
-                Text("Return", fontSize = 12.sp, color = Color(0xFF999999))
+                Text("+${xMax}m", fontSize = 13.sp, fontWeight = FontWeight.Medium, color = Color(0xFF666666))
+                Text("~Done", fontSize = 12.sp, color = Color(0xFF999999))
             }
         }
     }
