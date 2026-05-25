@@ -37,6 +37,11 @@ Curve parameter guidance (fallback if nutrientConfidence is "low"):
 - decayHalfLife (minutes to halve after peak): SEVERE=30-40, HIGH=40-55, MODERATE=50-65, LOW=60-75, MINIMAL=65-75. NEVER below 30. Glucose takes 90-120 min from the meal to return to baseline. Fat and protein slow decay further.
 - Adjust peakTime UP and peakMgDl DOWN if the meal is high in fat, fiber, or protein
 
+Secondary glucose wave:
+- secondaryBump: true if the food causes a second glucose rise after the first peak. Common in: pizza, biryani, pasta with meat/cheese, candy bars (fast sugar + slow chocolate carbs), any high-fat+high-carb combo. False for simple foods (pure sugar drink, plain rice, eggs).
+- bumpTime: minutes after meal when second peak occurs (typically 90–150). Only required if secondaryBump is true.
+- bumpMgDl: height of second peak in mg/dL above baseline (typically 30–60% of first peakMgDl). Only required if secondaryBump is true.
+
 Reply ONLY with a JSON object, no markdown:
 {
   "category": "SEVERE|HIGH|MODERATE|LOW|MINIMAL",
@@ -52,7 +57,10 @@ Reply ONLY with a JSON object, no markdown:
   "nutrientConfidence": "high|medium|low",
   "peakTime": <integer minutes>,
   "peakMgDl": <integer mg/dL>,
-  "decayHalfLife": <integer minutes>
+  "decayHalfLife": <integer minutes>,
+  "secondaryBump": true|false,
+  "bumpTime": <integer minutes, only if secondaryBump true>,
+  "bumpMgDl": <integer mg/dL, only if secondaryBump true>
 }`;
 
 function nutrientsToParams(n: { carbs: number; fiber: number; fat: number; protein: number }): {
@@ -87,7 +95,7 @@ export async function classifyFoodCurve(params: {
 
   const response = await openai.chat.completions.create({
     model: "gpt-4o",
-    max_tokens: 600,
+    max_tokens: 700,
     messages: [
       { role: "system", content: CLASSIFICATION_PROMPT },
       { role: "user", content: userContent as never },
@@ -110,6 +118,9 @@ export async function classifyFoodCurve(params: {
     peakTime?: unknown;
     peakMgDl?: unknown;
     decayHalfLife?: unknown;
+    secondaryBump?: unknown;
+    bumpTime?: unknown;
+    bumpMgDl?: unknown;
   } = {};
 
   try {
@@ -161,9 +172,13 @@ export async function classifyFoodCurve(params: {
       ? { peakTime: gptPeakTime, peakMgDl: gptPeakMgDl, decayHalfLife: gptDecayHalfLife }
       : null;
 
+  const secondaryBump = parsed.secondaryBump === true;
+  const bumpTime = typeof parsed.bumpTime === "number" ? Math.round(Math.min(160, Math.max(60, parsed.bumpTime))) : undefined;
+  const bumpMgDl = typeof parsed.bumpMgDl === "number" ? Math.round(Math.max(3, parsed.bumpMgDl)) : undefined;
+
   const finalParams = mathParams ?? gptParams;
   const curvePoints = finalParams !== null
-    ? renderCurveFromParams(finalParams)
+    ? renderCurveFromParams({ ...finalParams, secondaryBump, bumpTime, bumpMgDl })
     : generateCurvePoints(category);
 
   return {

@@ -3,10 +3,12 @@ import type { CurvePoint } from "../services/shareCard.js";
 export type CurveCategory = "SEVERE" | "HIGH" | "MODERATE" | "LOW" | "MINIMAL";
 
 type CategoryParams = {
-  peakTime: number;       // minutes to reach peak
-  peakMgDl: number;      // mg/dL above baseline at peak
-  decayHalfLife: number; // minutes to halve after peak
-  secondaryBump: boolean; // second smaller hump (e.g. ultra-processed two-wave digestion)
+  peakTime: number;
+  peakMgDl: number;
+  decayHalfLife: number;
+  secondaryBump: boolean;
+  bumpTime?: number;  // minutes to second peak (GPT-provided)
+  bumpMgDl?: number; // height of second peak in mg/dL (GPT-provided)
 };
 
 const CATEGORY_PARAMS: Record<CurveCategory, CategoryParams> = {
@@ -22,13 +24,15 @@ export function renderCurveFromParams(p: {
   peakMgDl: number;
   decayHalfLife: number;
   secondaryBump?: boolean;
+  bumpTime?: number;
+  bumpMgDl?: number;
 }): CurvePoint[] {
   return generateCurvePoints("MODERATE", p);
 }
 
 export function generateCurvePoints(category: CurveCategory, override?: Partial<CategoryParams>): CurvePoint[] {
   const base = CATEGORY_PARAMS[category];
-  const { peakTime, peakMgDl, decayHalfLife, secondaryBump } = { ...base, ...override };
+  const { peakTime, peakMgDl, decayHalfLife, secondaryBump, bumpTime, bumpMgDl } = { ...base, ...override };
   const decayK = Math.LN2 / decayHalfLife;
   const points: CurvePoint[] = [];
 
@@ -44,11 +48,11 @@ export function generateCurvePoints(category: CurveCategory, override?: Partial<
       value = peakMgDl * Math.exp(-decayK * (minute - peakTime));
     }
 
-    // Optional secondary bump centred at 1.8× peak time
+    // Optional secondary bump using GPT-provided timing and height
     if (secondaryBump) {
-      const bumpCenter = peakTime * 1.8;
-      const bumpHeight = peakMgDl * 0.35;
-      const bumpWidth = 25;
+      const bumpCenter = bumpTime ?? peakTime * 1.8;
+      const bumpHeight = bumpMgDl ?? peakMgDl * 0.35;
+      const bumpWidth = 20;
       const d = minute - bumpCenter;
       value += bumpHeight * Math.exp(-(d * d) / (2 * bumpWidth * bumpWidth));
     }
