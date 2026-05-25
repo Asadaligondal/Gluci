@@ -130,7 +130,8 @@ fun GlucoseCurveChart(
                 )
 
                 if (curvePoints.size >= 2) {
-                    val scaleCeiling = 100f
+                    val peakVal = curvePoints.maxOf { it.mgDl }.toFloat()
+                    val scaleCeiling = (peakVal * 1.5f).coerceIn(45f, 100f)
 
                     val sorted = curvePoints.filter { it.minute <= xMax }.sortedBy { it.minute }
                     val pts = sorted.map { pt ->
