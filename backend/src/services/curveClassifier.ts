@@ -187,6 +187,15 @@ export async function classifyFoodCurve(params: {
   }
 
   const finalParams = mathParams ?? gptParams;
+  const paramsSource = mathParams ? "math-model" : gptParams ? "gpt-direct" : "category-default";
+  console.log(`[curve] source=${paramsSource} nutrients={carbs=${carbs},fiber=${fiber},fat=${fat},protein=${protein},conf=${nutrientConfidence ?? "n/a"}}`);
+  if (finalParams) {
+    console.log(`[curve] params: peakTime=${finalParams.peakTime}m peakMgDl=${finalParams.peakMgDl} decayHalfLife=${finalParams.decayHalfLife}m`);
+  }
+  if (bumps.length > 0) {
+    console.log(`[curve] bumps(${bumps.length}): ${bumps.map(b => `t=${b.time}m h=${b.mgDl}mg/dL w=${b.width}m`).join(" | ")}`);
+  }
+
   const curvePoints = finalParams !== null
     ? renderCurveFromParams({ ...finalParams, bumps })
     : generateCurvePoints(category);
