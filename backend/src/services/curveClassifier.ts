@@ -37,10 +37,14 @@ Curve parameter guidance (fallback if nutrientConfidence is "low"):
 - decayHalfLife (minutes to halve after peak): SEVERE=30-40, HIGH=40-55, MODERATE=50-65, LOW=60-75, MINIMAL=65-75. NEVER below 30. Glucose takes 90-120 min from the meal to return to baseline. Fat and protein slow decay further.
 - Adjust peakTime UP and peakMgDl DOWN if the meal is high in fat, fiber, or protein
 
-Secondary glucose wave:
-- secondaryBump: true if the food causes a second glucose rise after the first peak. Common in: pizza, biryani, pasta with meat/cheese, candy bars (fast sugar + slow chocolate carbs), any high-fat+high-carb combo. False for simple foods (pure sugar drink, plain rice, eggs).
-- bumpTime: minutes after meal when second peak occurs (typically 90–150). Only required if secondaryBump is true.
-- bumpMgDl: height of second peak in mg/dL above baseline (typically 30–60% of first peakMgDl). Only required if secondaryBump is true.
+Glucose waves (bumps array):
+Output a "bumps" array for any additional glucose rises after the main peak. Use [] if none.
+Each entry: { "time": <minutes after meal, 60–160>, "mgDl": <mg/dL above baseline>, "width": <spread in minutes> }
+- width: fat-driven wave = broad (35–50), complex carb secondary = medium (20–30), hormonal rebound = narrow (12–18)
+- mgDl: typically 30–60% of main peakMgDl; each bump can have a different height
+- Foods with bumps: pizza (fat delay ~120m), biryani (~110m), pasta with meat (~100m), candy bars (~80m), full mixed meals
+- Foods without bumps: pure sugar drinks, plain rice, eggs, simple snacks → use []
+- Max 3 bumps. Order by time ascending.
 
 Reply ONLY with a JSON object, no markdown:
 {
@@ -58,9 +62,7 @@ Reply ONLY with a JSON object, no markdown:
   "peakTime": <integer minutes>,
   "peakMgDl": <integer mg/dL>,
   "decayHalfLife": <integer minutes>,
-  "secondaryBump": true|false,
-  "bumpTime": <integer minutes, only if secondaryBump true>,
-  "bumpMgDl": <integer mg/dL, only if secondaryBump true>
+  "bumps": [{ "time": <int>, "mgDl": <int>, "width": <int> }]
 }`;
 
 function nutrientsToParams(n: { carbs: number; fiber: number; fat: number; protein: number }): {
@@ -118,9 +120,7 @@ export async function classifyFoodCurve(params: {
     peakTime?: unknown;
     peakMgDl?: unknown;
     decayHalfLife?: unknown;
-    secondaryBump?: unknown;
-    bumpTime?: unknown;
-    bumpMgDl?: unknown;
+    bumps?: unknown;
   } = {};
 
   try {
@@ -172,13 +172,23 @@ export async function classifyFoodCurve(params: {
       ? { peakTime: gptPeakTime, peakMgDl: gptPeakMgDl, decayHalfLife: gptDecayHalfLife }
       : null;
 
-  const secondaryBump = parsed.secondaryBump === true;
-  const bumpTime = typeof parsed.bumpTime === "number" ? Math.round(Math.min(160, Math.max(60, parsed.bumpTime))) : undefined;
-  const bumpMgDl = typeof parsed.bumpMgDl === "number" ? Math.round(Math.max(3, parsed.bumpMgDl)) : undefined;
+  const bumps: { time: number; mgDl: number; width: number }[] = [];
+  if (Array.isArray(parsed.bumps)) {
+    for (const b of (parsed.bumps as unknown[]).slice(0, 3)) {
+      const bObj = b as Record<string, unknown>;
+      if (typeof bObj?.time === "number" && typeof bObj?.mgDl === "number" && typeof bObj?.width === "number") {
+        bumps.push({
+          time: Math.round(Math.min(160, Math.max(60, bObj.time))),
+          mgDl: Math.round(Math.max(3, bObj.mgDl)),
+          width: Math.round(Math.min(60, Math.max(10, bObj.width))),
+        });
+      }
+    }
+  }
 
   const finalParams = mathParams ?? gptParams;
   const curvePoints = finalParams !== null
-    ? renderCurveFromParams({ ...finalParams, secondaryBump, bumpTime, bumpMgDl })
+    ? renderCurveFromParams({ ...finalParams, bumps })
     : generateCurvePoints(category);
 
   return {
