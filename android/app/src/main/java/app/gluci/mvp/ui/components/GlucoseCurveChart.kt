@@ -129,8 +129,7 @@ fun GlucoseCurveChart(
                 )
 
                 if (curvePoints.size >= 2) {
-                    val actualMax = curvePoints.maxOf { it.mgDl }.toFloat()
-                    val scaleCeiling = maxOf(actualMax * 1.15f, 20f)
+                    val scaleCeiling = 100f
 
                     val sorted = curvePoints.filter { it.minute <= xMax }.sortedBy { it.minute }
                     val pts = sorted.map { pt ->
@@ -143,6 +142,16 @@ fun GlucoseCurveChart(
                     val pPt = curvePoints.maxByOrNull { it.mgDl }!!
                     val peakX = (pPt.minute.toFloat() / xMax.toFloat()) * w
                     val peakY = h - bottomPad - (pPt.mgDl.toFloat() / scaleCeiling) * drawH
+
+                    // Reference line at 20 mg/dL ("normal / low impact" zone)
+                    val refY = h - bottomPad - (20f / scaleCeiling) * drawH
+                    drawLine(
+                        color = Color(0xFF43A047).copy(alpha = 0.5f),
+                        start = Offset(0f, refY),
+                        end = Offset(w, refY),
+                        strokeWidth = 1.dp.toPx(),
+                        pathEffect = PathEffect.dashPathEffect(floatArrayOf(6.dp.toPx(), 4.dp.toPx()), 0f),
+                    )
 
                     // Fill
                     drawPath(
@@ -200,6 +209,28 @@ fun GlucoseCurveChart(
                     // Peak dot
                     drawCircle(Color.White, radius = 5.dp.toPx(), center = Offset(peakX, peakY))
                     drawCircle(CurvePurple, radius = 3.dp.toPx(), center = Offset(peakX, peakY))
+
+                    // Y-axis labels at 0, 50, 100
+                    val yLabelPaint = android.graphics.Paint().apply {
+                        color = android.graphics.Color.argb(160, 0x88, 0x88, 0x88)
+                        textSize = 9.sp.toPx()
+                        textAlign = android.graphics.Paint.Align.LEFT
+                        isAntiAlias = true
+                    }
+                    listOf(0, 50, 100).forEach { mgDl ->
+                        val yPos = h - bottomPad - (mgDl.toFloat() / scaleCeiling) * drawH
+                        val textY = (yPos - 2.dp.toPx()).coerceIn(topPad + 4.dp.toPx(), h - bottomPad - 2.dp.toPx())
+                        drawContext.canvas.nativeCanvas.drawText("$mgDl", 4.dp.toPx(), textY, yLabelPaint)
+                    }
+
+                    // Reference line label
+                    val refLabelPaint = android.graphics.Paint().apply {
+                        color = android.graphics.Color.argb(200, 0x43, 0xA0, 0x47)
+                        textSize = 9.sp.toPx()
+                        textAlign = android.graphics.Paint.Align.RIGHT
+                        isAntiAlias = true
+                    }
+                    drawContext.canvas.nativeCanvas.drawText("normal", w - 2.dp.toPx(), refY - 3.dp.toPx(), refLabelPaint)
                 }
             }
         }
