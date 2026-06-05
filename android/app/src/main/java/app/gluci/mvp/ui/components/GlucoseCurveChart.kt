@@ -131,7 +131,9 @@ fun GlucoseCurveChart(
 
                 if (curvePoints.size >= 2) {
                     val peakVal = curvePoints.maxOf { it.mgDl }.toFloat()
-                    val scaleCeiling = (peakVal * 1.5f).coerceIn(45f, 100f)
+                    // Semi-adaptive ceiling. Upper clamp tracks the actual peak so the
+                    // curve (incl. stacked bumps) always fits with ~15% headroom.
+                    val scaleCeiling = (peakVal * 1.5f).coerceIn(45f, maxOf(100f, peakVal * 1.15f))
 
                     val sorted = curvePoints.filter { it.minute <= xMax }.sortedBy { it.minute }
                     val pts = sorted.map { pt ->
@@ -212,14 +214,16 @@ fun GlucoseCurveChart(
                     drawCircle(Color.White, radius = 5.dp.toPx(), center = Offset(peakX, peakY))
                     drawCircle(CurvePurple, radius = 3.dp.toPx(), center = Offset(peakX, peakY))
 
-                    // Y-axis labels at 0, 50, 100
+                    // Y-axis labels — derived from the ceiling so they track the actual scale
                     val yLabelPaint = android.graphics.Paint().apply {
                         color = android.graphics.Color.argb(160, 0x88, 0x88, 0x88)
                         textSize = 9.sp.toPx()
                         textAlign = android.graphics.Paint.Align.LEFT
                         isAntiAlias = true
                     }
-                    listOf(0, 50, 100).forEach { mgDl ->
+                    val labelStep = ((scaleCeiling / 2f / 5f).toInt().coerceAtLeast(1)) * 5
+                    listOf(0, labelStep, labelStep * 2).forEach { mgDl ->
+                        if (mgDl.toFloat() > scaleCeiling) return@forEach
                         val yPos = h - bottomPad - (mgDl.toFloat() / scaleCeiling) * drawH
                         val textY = (yPos - 2.dp.toPx()).coerceIn(topPad + 4.dp.toPx(), h - bottomPad - 2.dp.toPx())
                         drawContext.canvas.nativeCanvas.drawText("$mgDl", 4.dp.toPx(), textY, yLabelPaint)
