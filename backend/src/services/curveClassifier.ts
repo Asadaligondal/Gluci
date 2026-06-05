@@ -198,7 +198,7 @@ export async function classifyFoodCurve(params: {
 
   const curvePoints = finalParams !== null
     ? renderCurveFromParams({ ...finalParams, bumps })
-    : generateCurvePoints(category);
+    : generateCurvePoints(category, { bumps });
 
   return {
     category,
