@@ -9,6 +9,7 @@ type CategoryParams = {
   peakMgDl: number;
   decayHalfLife: number;
   bumps?: BumpParams[];
+  onsetDelay?: number;
 };
 
 const CATEGORY_PARAMS: Record<CurveCategory, CategoryParams> = {
@@ -24,22 +25,29 @@ export function renderCurveFromParams(p: {
   peakMgDl: number;
   decayHalfLife: number;
   bumps?: BumpParams[];
+  onsetDelay?: number;
 }): CurvePoint[] {
   return generateCurvePoints("MODERATE", p);
 }
 
 export function generateCurvePoints(category: CurveCategory, override?: Partial<CategoryParams>): CurvePoint[] {
   const base = CATEGORY_PARAMS[category];
-  const { peakTime, peakMgDl, decayHalfLife, bumps } = { ...base, ...override };
+  const { peakTime, peakMgDl, decayHalfLife, bumps, onsetDelay } = { ...base, ...override };
   const decayK = Math.LN2 / decayHalfLife;
+  // Glucose stays at baseline until onset, then rises. Guard so the rise window
+  // (onset → peak) never collapses if a bad delay >= peakTime sneaks through.
+  const onset = Math.max(0, Math.min(onsetDelay ?? 0, peakTime - 10));
   const points: CurvePoint[] = [];
 
   for (let minute = 0; minute <= 180; minute += 10) {
     let value: number;
 
-    if (minute <= peakTime) {
-      // Smooth S-shaped rise (smoothstep: 3t²−2t³)
-      const t = minute / peakTime;
+    if (minute <= onset) {
+      // Flat at baseline before digestion-driven rise begins
+      value = 0;
+    } else if (minute <= peakTime) {
+      // Smooth S-shaped rise (smoothstep: 3t²−2t³) over the onset→peak window
+      const t = (minute - onset) / (peakTime - onset);
       value = peakMgDl * (t * t * (3 - 2 * t));
     } else {
       // Exponential decay after peak

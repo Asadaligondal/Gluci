@@ -35,6 +35,7 @@ Curve parameter guidance (fallback if nutrientConfidence is "low"):
 - peakTime (minutes to peak): liquid/sugar=15-25, refined carbs=25-40, mixed meals=40-60, high fat/fiber=55-80
 - peakMgDl (mg/dL rise above baseline): SEVERE=65-85, HIGH=45-65, MODERATE=25-45, LOW=12-28, MINIMAL=3-12
 - decayHalfLife (minutes to halve after peak): SEVERE=30-40, HIGH=40-55, MODERATE=50-65, LOW=60-75, MINIMAL=65-75. NEVER below 30. Glucose takes 90-120 min from the meal to return to baseline. Fat and protein slow decay further.
+- onsetDelay (minutes glucose stays flat before rising): liquids/pure sugar=0, refined carbs=0-5, mixed meals=10-20, high fat/protein meals=20-30. Fat and protein delay digestion, so a fatty steak or full meal stays flat early then rises. Must be well below peakTime.
 - Adjust peakTime UP and peakMgDl DOWN if the meal is high in fat, fiber, or protein
 
 Glucose waves (bumps array):
@@ -62,6 +63,7 @@ Reply ONLY with a JSON object, no markdown:
   "peakTime": <integer minutes>,
   "peakMgDl": <integer mg/dL>,
   "decayHalfLife": <integer minutes>,
+  "onsetDelay": <integer minutes>,
   "bumps": [{ "time": <int>, "mgDl": <int>, "width": <int> }]
 }`;
 
@@ -120,6 +122,7 @@ export async function classifyFoodCurve(params: {
     peakTime?: unknown;
     peakMgDl?: unknown;
     decayHalfLife?: unknown;
+    onsetDelay?: unknown;
     bumps?: unknown;
   } = {};
 
@@ -186,19 +189,23 @@ export async function classifyFoodCurve(params: {
     }
   }
 
+  const onsetDelay = typeof parsed.onsetDelay === "number"
+    ? Math.round(Math.min(40, Math.max(0, parsed.onsetDelay)))
+    : 0;
+
   const finalParams = mathParams ?? gptParams;
   const paramsSource = mathParams ? "math-model" : gptParams ? "gpt-direct" : "category-default";
   console.log(`[curve] source=${paramsSource} nutrients={carbs=${carbs},fiber=${fiber},fat=${fat},protein=${protein},conf=${nutrientConfidence ?? "n/a"}}`);
   if (finalParams) {
-    console.log(`[curve] params: peakTime=${finalParams.peakTime}m peakMgDl=${finalParams.peakMgDl} decayHalfLife=${finalParams.decayHalfLife}m`);
+    console.log(`[curve] params: peakTime=${finalParams.peakTime}m peakMgDl=${finalParams.peakMgDl} decayHalfLife=${finalParams.decayHalfLife}m onsetDelay=${onsetDelay}m`);
   }
   if (bumps.length > 0) {
     console.log(`[curve] bumps(${bumps.length}): ${bumps.map(b => `t=${b.time}m h=${b.mgDl}mg/dL w=${b.width}m`).join(" | ")}`);
   }
 
   const curvePoints = finalParams !== null
-    ? renderCurveFromParams({ ...finalParams, bumps })
-    : generateCurvePoints(category, { bumps });
+    ? renderCurveFromParams({ ...finalParams, bumps, onsetDelay })
+    : generateCurvePoints(category, { bumps, onsetDelay });
 
   return {
     category,
