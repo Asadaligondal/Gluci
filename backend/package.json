@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "node scripts/dev.mjs",
-    "build": "prisma migrate deploy && prisma generate && tsc",
+    "build": "prisma generate && tsc",
     "start": "node dist/index.js",
     "db:generate": "prisma generate",
     "db:push": "prisma db push",
