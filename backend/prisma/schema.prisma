@@ -37,6 +37,9 @@ model User {
   telegramOnboardingSent Boolean @default(false)
   whatsappOnboardingSent Boolean @default(false)
   fcmToken               String?
+  /// Meta Click-to-WhatsApp ad attribution — stored on first inbound message only.
+  acquisitionSource    String?
+  ctwaClid             String?
   profile              Profile?
   messages             Message[]
   usageEvents          UsageEvent[]

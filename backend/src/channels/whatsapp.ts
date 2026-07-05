@@ -144,6 +144,26 @@ export async function handleWhatsAppPayload(body: Record<string, unknown>) {
 
   const user = await getOrCreateWhatsAppUser(from);
 
+  // ── Meta Ads attribution (first-touch only) ────────────────────────────────
+  const referral = msg.referral as {
+    source_url?: string;
+    source_id?: string;
+    source_type?: string;
+    ctwa_clid?: string;
+  } | undefined;
+  if (referral && !user.acquisitionSource) {
+    const source =
+      referral.source_type && referral.source_id
+        ? `${referral.source_type}:${referral.source_id}`
+        : referral.source_url ?? "meta_ad";
+    const clid = referral.ctwa_clid ?? null;
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { acquisitionSource: source, ...(clid ? { ctwaClid: clid } : {}) },
+    });
+    console.log(`[attribution] waId=${from} source="${source}" ctwa_clid="${clid ?? "none"}"`);
+  }
+
   const low = text.toLowerCase();
   if (low === "stop nudges" || low === "/stop" || low === "stop") {
     await prisma.user.update({ where: { id: user.id }, data: { reengagementOptOut: true } });
