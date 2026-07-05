@@ -20,7 +20,6 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -104,7 +103,7 @@ fun WelcomeScreen(nav: NavController) {
 
             Text(
                 text = buildAnnotatedString {
-                    append("Nourishment, simplified by\n")
+                    append("Eat calmer,\n")
                     withStyle(
                         SpanStyle(
                             color = MaterialTheme.colorScheme.primary,
@@ -112,7 +111,7 @@ fun WelcomeScreen(nav: NavController) {
                             fontWeight = FontWeight.Bold,
                         ),
                     ) {
-                        append("Intelligence.")
+                        append("effortlessly.")
                     }
                 },
                 style = MaterialTheme.typography.displayLarge,
@@ -123,7 +122,7 @@ fun WelcomeScreen(nav: NavController) {
             Spacer(Modifier.height(16.dp))
 
             Text(
-                "Your friendly AI dietitian that turns health goals into effortless daily habits. No stress, just serene nutrition.",
+                "Score any meal before you eat it. Two minutes to build your plan.",
                 style = MaterialTheme.typography.bodyLarge,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Start,
@@ -151,19 +150,14 @@ fun WelcomeScreen(nav: NavController) {
 
             Spacer(Modifier.height(12.dp))
 
-            OutlinedButton(
+            TextButton(
                 onClick = { nav.navigate("signin") },
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(999.dp),
-                border = BorderStroke(1.dp, Color.White.copy(alpha = 0.85f)),
-                colors = ButtonDefaults.outlinedButtonColors(
-                    contentColor = MaterialTheme.colorScheme.primary,
-                ),
             ) {
                 Text(
-                    "Learn more",
-                    style = MaterialTheme.typography.titleLarge.copy(fontSize = MaterialTheme.typography.bodyLarge.fontSize),
-                    modifier = Modifier.padding(vertical = 8.dp),
+                    "I already have an account",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
 

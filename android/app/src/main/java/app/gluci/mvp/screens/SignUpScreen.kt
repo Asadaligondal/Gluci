@@ -86,7 +86,7 @@ fun SignUpScreen(
             ) {
                 Column(Modifier.padding(24.dp)) {
                     Text(
-                        "Create your account",
+                        "Almost there",
                         style = MaterialTheme.typography.displayLarge,
                         color = MaterialTheme.colorScheme.onBackground,
                         textAlign = TextAlign.Center,
@@ -94,7 +94,7 @@ fun SignUpScreen(
                     )
                     Spacer(Modifier.height(8.dp))
                     Text(
-                        "Start your calm path to better nutrition with Gluci.",
+                        "Create an account to save your plan.",
                         style = MaterialTheme.typography.bodyLarge,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         textAlign = TextAlign.Center,

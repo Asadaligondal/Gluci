@@ -160,11 +160,29 @@ class GluciViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    fun completeAppOnboarding(onDone: () -> Unit) {
+    fun completeAppOnboarding(
+        goal: String = "",
+        dietStyle: String = "",
+        allergies: String = "",
+        activity: String = "",
+        onDone: () -> Unit,
+    ) {
         val t = _token.value ?: return
         viewModelScope.launch {
             try {
-                api.patchProfile("Bearer $t", ProfilePatch(appOnboardingComplete = true))
+                val dietary = buildMap<String, String> {
+                    if (dietStyle.isNotBlank()) put("diet_style", dietStyle)
+                    if (allergies.isNotBlank() && allergies != "None") put("allergies", allergies)
+                    if (activity.isNotBlank()) put("activity", activity)
+                }
+                api.patchProfile(
+                    "Bearer $t",
+                    ProfilePatch(
+                        goal = goal.trim().takeIf { it.isNotEmpty() },
+                        dietaryJson = dietary.ifEmpty { null },
+                        appOnboardingComplete = true,
+                    ),
+                )
                 refreshProfile()
                 logAnalyticsEvent("onboarding_complete", emptyMap())
                 onDone()
@@ -724,15 +742,19 @@ class GluciViewModel(app: Application) : AndroidViewModel(app) {
         goal: String,
         allergies: String,
         preferences: String,
+        dietStyle: String = "",
+        activity: String = "",
         reengagementOptOut: Boolean,
         frequencyDays: Int,
     ) {
         val t = _token.value ?: return
         viewModelScope.launch {
             try {
-                val dietary = buildMap {
+                val dietary = buildMap<String, String> {
                     if (allergies.isNotBlank()) put("allergies", allergies.trim())
                     if (preferences.isNotBlank()) put("preferences", preferences.trim())
+                    if (dietStyle.isNotBlank()) put("diet_style", dietStyle)
+                    if (activity.isNotBlank()) put("activity", activity)
                 }
                 api.patchProfile(
                     "Bearer $t",

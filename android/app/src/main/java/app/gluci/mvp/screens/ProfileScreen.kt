@@ -385,6 +385,8 @@ fun ProfileScreen(vm: GluciViewModel, nav: NavController) {
     var goal by remember { mutableStateOf("") }
     var allergies by remember { mutableStateOf("") }
     var preferences by remember { mutableStateOf("") }
+    var dietStyle by remember { mutableStateOf("") }
+    var activity by remember { mutableStateOf("") }
     var muteCheckins by remember { mutableStateOf(false) }
     var freqDays by remember { mutableStateOf("1") }
     var goalSeededFromServer by remember { mutableStateOf(false) }
@@ -407,6 +409,8 @@ fun ProfileScreen(vm: GluciViewModel, nav: NavController) {
             if (d != null) {
                 allergies = d["allergies"]?.toString().orEmpty()
                 preferences = d["preferences"]?.toString().orEmpty()
+                dietStyle = d["diet_style"]?.toString().orEmpty()
+                activity = d["activity"]?.toString().orEmpty()
             }
             muteCheckins = profile?.reengagementOptOut == true
             freqDays = (profile?.reengagementFrequencyDays ?: 1).toString()
@@ -492,6 +496,49 @@ fun ProfileScreen(vm: GluciViewModel, nav: NavController) {
                 verticalArrangement = Arrangement.spacedBy(6.dp),
             ) {
                 SettingsSectionHeader(Icons.Outlined.Person, "Profile", Modifier.padding(top = 4.dp))
+
+                // Read-only onboarding answers summary
+                val profileRows = listOf(
+                    "Goal" to goal.ifBlank { "—" },
+                    "Diet style" to dietStyle.ifBlank { "—" },
+                    "Allergies" to allergies.ifBlank { "—" },
+                    "Activity" to activity.ifBlank { "—" },
+                )
+                SettingsCard {
+                    Text(
+                        "YOUR EATING PROFILE",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Spacer(Modifier.height(12.dp))
+                    profileRows.forEachIndexed { i, (label, value) ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(
+                                label,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            Text(
+                                value,
+                                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
+                                color = MaterialTheme.colorScheme.onSurface,
+                            )
+                        }
+                        if (i < profileRows.size - 1) {
+                            HorizontalDivider(
+                                modifier = Modifier.padding(vertical = 4.dp),
+                                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f),
+                                thickness = 0.5.dp,
+                            )
+                        }
+                    }
+                }
+
+                Spacer(Modifier.height(2.dp))
 
                 SettingsCard {
                     Text(
@@ -621,6 +668,8 @@ fun ProfileScreen(vm: GluciViewModel, nav: NavController) {
                                 goal = goal.trim(),
                                 allergies = allergies,
                                 preferences = preferences,
+                                dietStyle = dietStyle,
+                                activity = activity,
                                 reengagementOptOut = muteCheckins,
                                 frequencyDays = f,
                             )

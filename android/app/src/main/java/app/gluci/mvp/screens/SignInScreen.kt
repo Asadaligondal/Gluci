@@ -94,7 +94,7 @@ fun SignInScreen(
                     )
                     Spacer(Modifier.height(8.dp))
                     Text(
-                        "Step back into your journey of wellness.",
+                        "Your plan is waiting — sign in to continue.",
                         style = MaterialTheme.typography.bodyLarge,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         textAlign = TextAlign.Center,
