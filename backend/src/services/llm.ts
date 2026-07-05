@@ -693,26 +693,32 @@ export async function generateCurveTips(params: {
   try {
     const completion = await client.chat.completions.create({
       model: "gpt-4o-mini",
-      max_tokens: 200,
+      max_tokens: 300,
       temperature: 0.7,
       response_format: { type: "json_object" },
       messages: [
         {
           role: "system",
-          content: `You are a glucose science coach. Return exactly 2 short, specific, actionable tips to flatten the glucose spike for this meal. Each tip must be one concrete sentence with an approximate percentage benefit (e.g. "Eat the salad before your pasta — flattens the spike by ~25–30%"). Be specific to the actual meal. Return ONLY: {"tips": ["tip1", "tip2"]}`,
+          content: `You are a glucose science coach. Given a meal and its glucose analysis, return a JSON object with exactly 2 specific, actionable tips to flatten the spike. Each tip is one sentence referencing this specific meal, with an approximate % benefit. Example format:
+{"tips": ["Eat the lettuce and tomato from your BLT before the bread — delays the spike by ~20%", "A 10-min walk after this sandwich flattens the peak by ~15%"]}
+Return ONLY valid JSON with a "tips" array of exactly 2 strings.`,
         },
         {
           role: "user",
-          content: `Meal: ${params.foodName}\nScore: ${params.score}/10\nVerdict: ${params.verdict}\nPeak: +${Math.round(params.peakMgDl)} mg/dL at ${params.peakMinute} min`,
+          content: `Meal: ${params.foodName}\nScore: ${params.score}/10\nVerdict: ${params.verdict}\nEstimated glucose peak: +${Math.round(params.peakMgDl)} mg/dL at ${params.peakMinute} min after eating`,
         },
       ],
     });
-    const raw = JSON.parse(completion.choices[0]?.message?.content ?? "{}") as { tips?: string[] };
-    if (Array.isArray(raw.tips) && raw.tips.length >= 2 && typeof raw.tips[0] === "string" && typeof raw.tips[1] === "string") {
-      return [raw.tips[0].trim(), raw.tips[1].trim()];
+    const content = completion.choices[0]?.message?.content ?? "";
+    console.log(`[curve-tips] raw="${content.slice(0, 300)}"`);
+    const raw = JSON.parse(content) as { tips?: unknown[] };
+    const tips = raw.tips;
+    if (Array.isArray(tips) && tips.length >= 2 && typeof tips[0] === "string" && typeof tips[1] === "string") {
+      return [tips[0].trim(), tips[1].trim()];
     }
-  } catch {
-    /* fall through to defaults */
+    console.warn(`[curve-tips] unexpected shape: ${content.slice(0, 200)}`);
+  } catch (e) {
+    console.warn(`[curve-tips] failed: ${e}`);
   }
   return [
     "Eat vegetables or salad before the main dish — this can reduce the glucose spike by 20–30%.",
