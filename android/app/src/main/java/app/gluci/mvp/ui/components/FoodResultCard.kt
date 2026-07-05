@@ -44,6 +44,7 @@ fun FoodResultCard(
     onShare: () -> Unit,
     modifier: Modifier = Modifier,
     ragAdjusted: Boolean? = null,
+    tips: List<String>? = null,
     onClick: (() -> Unit)? = null,
 ) {
     val resolvedImg = remember(foodImageUrl) { foodImageUrl?.reachableMediaUrl() }
@@ -149,31 +150,45 @@ fun FoodResultCard(
         // Glucose Curve
         GlucoseCurveChart(curvePoints = curvePoints)
 
-        // Tip section
-        if (tip.isNotBlank()) {
+        // Tip section — shows 2 numbered tips if available, else single tip
+        val activeTips = tips?.filter { it.isNotBlank() }?.take(2)
+        val showTips = !activeTips.isNullOrEmpty() || tip.isNotBlank()
+        if (showTips) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .background(CardBg, RoundedCornerShape(14.dp))
                     .padding(14.dp),
-                verticalAlignment = Alignment.CenterVertically,
+                verticalAlignment = Alignment.Top,
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 Text("🥗", fontSize = 28.sp)
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        "Want a flatter curve?",
+                        "2 ways to flatten your curve",
                         fontSize = 14.sp,
                         fontWeight = FontWeight.Bold,
                         color = Color(0xFF1A1A1A),
                     )
-                    Spacer(Modifier.height(3.dp))
-                    Text(
-                        tip,
-                        fontSize = 13.sp,
-                        color = Color(0xFF555555),
-                        lineHeight = 18.sp,
-                    )
+                    Spacer(Modifier.height(6.dp))
+                    if (!activeTips.isNullOrEmpty()) {
+                        activeTips.forEachIndexed { i, t ->
+                            Text(
+                                "${i + 1}. $t",
+                                fontSize = 13.sp,
+                                color = Color(0xFF555555),
+                                lineHeight = 18.sp,
+                            )
+                            if (i < activeTips.size - 1) Spacer(Modifier.height(4.dp))
+                        }
+                    } else {
+                        Text(
+                            tip,
+                            fontSize = 13.sp,
+                            color = Color(0xFF555555),
+                            lineHeight = 18.sp,
+                        )
+                    }
                 }
             }
         }

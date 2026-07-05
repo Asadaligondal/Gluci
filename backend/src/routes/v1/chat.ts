@@ -48,6 +48,7 @@ chatRouter.post("/", async (req: AuthedRequest, res) => {
       paywall: out.paywall,
       glucoseCurve: isFoodIntent ? (out.structured.glucoseCurve ?? null) : null,
       tip: isFoodIntent ? (out.structured.tip ?? null) : null,
+      tips: isFoodIntent ? (out.tips ?? null) : null,
       food: isFoodIntent ? (out.food ?? null) : null,
       mealGI: isFoodIntent ? (out.structured.mealGI ?? null) : null,
       mealGL: isFoodIntent ? (out.structured.mealGL ?? null) : null,

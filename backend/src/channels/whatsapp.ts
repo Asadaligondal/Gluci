@@ -2,7 +2,6 @@ import { prisma } from "../db.js";
 import { getConfig } from "../config.js";
 import { getOrCreateWhatsAppUser } from "../services/users.js";
 import { handleChatTurn } from "../services/orchestrator.js";
-import { generateCurveTips } from "../services/llm.js";
 import { getOrCreateChannelConversation } from "../services/conversationService.js";
 import { tryLinkWhatsAppByCode } from "../services/linking.js";
 import { getPendingSetup, setPendingSetup, saveGoal, saveDietaryField } from "../services/profileService.js";
@@ -292,21 +291,8 @@ export async function handleWhatsAppPayload(body: Record<string, unknown>) {
   }
 
   let mainReply = out.reply;
-  const curve = out.structured.glucoseCurve;
-  if (out.structured.intent === "meal" && curve && curve.length >= 2) {
-    try {
-      const peakPt = curve.reduce((b, p) => (p.mg_dl > b.mg_dl ? p : b), curve[0]);
-      const [tip1, tip2] = await generateCurveTips({
-        foodName: out.food ?? "this meal",
-        score: out.structured.glucoseGalScore,
-        peakMgDl: peakPt.mg_dl,
-        peakMinute: peakPt.minute,
-        verdict: out.structured.verdict,
-      });
-      mainReply += `\n\n💡 2 ways to flatten your curve:\n1. ${tip1}\n2. ${tip2}`;
-    } catch {
-      /* tips are non-critical — skip silently */
-    }
+  if (out.tips) {
+    mainReply += `\n\n💡 2 ways to flatten your curve:\n1. ${out.tips[0]}\n2. ${out.tips[1]}`;
   }
 
   const ctaSuffix = out.shareCardUrl ? "\n\n📊 Sending your glucose card below!" : "";

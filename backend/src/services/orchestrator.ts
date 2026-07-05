@@ -7,6 +7,7 @@ import {
   checkScoreReasonability,
   extractFoodIngredients,
   generateFoodReply,
+  generateCurveTips,
   runGluciTurn,
   analyzeRestaurant,
   detectTextIntent,
@@ -218,6 +219,7 @@ export async function handleChatTurn(params: {
   userImageUrl?: string;
   paywall?: { message: string; checkoutUrl?: string };
   food?: string;
+  tips?: [string, string];
 }> {
   const cfg = getConfig();
   const user = await prisma.user.findUniqueOrThrow({
@@ -717,6 +719,24 @@ export async function handleChatTurn(params: {
     /* ignore */
   }
 
+  // Generate 2 curve-flattening tips for meal intents (all channels)
+  let tips: [string, string] | undefined;
+  if (structured.intent === "meal" && structured.glucoseCurve && structured.glucoseCurve.length >= 2) {
+    try {
+      const curve = structured.glucoseCurve;
+      const peakPt = curve.reduce((b, p) => (p.mg_dl > b.mg_dl ? p : b), curve[0]);
+      tips = await generateCurveTips({
+        foodName: foodLabel ?? "this meal",
+        score: structured.glucoseGalScore,
+        peakMgDl: peakPt.mg_dl,
+        peakMinute: peakPt.minute,
+        verdict: structured.verdict,
+      });
+    } catch {
+      /* non-critical */
+    }
+  }
+
   const base = cfg.PUBLIC_BASE_URL.replace(/\/$/, "");
   return {
     reply: finalReply,
@@ -729,5 +749,6 @@ export async function handleChatTurn(params: {
       ? (userImageFilename.startsWith("http") ? userImageFilename : `${base}/static/uploads/${userImageFilename}`)
       : productImageUrl,
     food: foodLabel,
+    tips,
   };
 }

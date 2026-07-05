@@ -65,6 +65,7 @@ data class ChatResponse(
     val verdict: String?,
     val intent: String?,
     val tip: String?,
+    val tips: List<String>? = null,
     val food: String? = null,
     val glucoseCurve: List<GluciCurvePoint>?,
     val topOrders: List<TopOrder>?,
