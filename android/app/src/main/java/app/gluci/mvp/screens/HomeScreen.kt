@@ -1,34 +1,39 @@
 package app.gluci.mvp.screens
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material.icons.outlined.DateRange
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -43,9 +48,11 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import app.gluci.mvp.data.BillingStatusResponse
 import app.gluci.mvp.data.DailySummaryDto
+import app.gluci.mvp.data.WeekDailyBarDto
 import app.gluci.mvp.data.WeeklySummaryDto
 import app.gluci.mvp.ui.components.GlucoseWeekSection
 import app.gluci.mvp.vm.GluciViewModel
@@ -55,8 +62,19 @@ import java.time.format.DateTimeFormatter
 import java.util.Locale
 
 private val HomeSageMuted = Color(0xFF769A8F)
+private val HomeForestGreen = Color(0xFF2D5A4B)
 private val ShortcutCardShape = RoundedCornerShape(16.dp)
-private val ChatCardShape = RoundedCornerShape(16.dp)
+private val ChatCardShape = RoundedCornerShape(14.dp)
+private val StatCardShape = RoundedCornerShape(14.dp)
+
+private fun computeStreak(bars: List<WeekDailyBarDto>): Int {
+    val sorted = bars.sortedByDescending { it.date }
+    var streak = 0
+    for (bar in sorted) {
+        if (bar.checks > 0) streak++ else break
+    }
+    return streak
+}
 
 @Composable
 fun HomeScreen(
@@ -76,17 +94,16 @@ fun HomeScreen(
         vm.logAnalyticsEvent("app_open", emptyMap())
     }
 
+    val createChat: () -> Unit = {
+        vm.createConversation { id -> nav.navigate("chat/$id") }
+    }
+
     SereneAuthBackground {
         Column(Modifier.fillMaxSize()) {
             HomeTopBar(
                 usage = usage,
                 billing = billing,
                 onUpgrade = { vm.showPaywallSheet() },
-                onNewChat = {
-                    vm.createConversation { id ->
-                        nav.navigate("chat/$id")
-                    }
-                },
                 onSettings = { nav.navigate("profile") },
             )
             LazyColumn(
@@ -97,10 +114,10 @@ fun HomeScreen(
                 contentPadding = PaddingValues(
                     start = 20.dp,
                     end = 20.dp,
-                    top = 16.dp,
+                    top = 20.dp,
                     bottom = 28.dp,
                 ),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp),
             ) {
                 err?.let { e ->
                     item {
@@ -112,21 +129,81 @@ fun HomeScreen(
                         )
                     }
                 }
+
+                // Primary action buttons
                 item {
-                    Column(Modifier.fillMaxWidth().padding(bottom = 4.dp)) {
-                        Text(
-                            "What are you eating next?",
-                            style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.SemiBold),
-                            color = MaterialTheme.colorScheme.primary,
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        Button(
+                            onClick = createChat,
+                            modifier = Modifier.weight(1.35f),
+                            shape = RoundedCornerShape(14.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = HomeForestGreen,
+                                contentColor = Color.White,
+                            ),
+                        ) {
+                            Text(
+                                "Snap a meal",
+                                style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold),
+                                modifier = Modifier.padding(vertical = 6.dp),
+                            )
+                        }
+                        OutlinedButton(
+                            onClick = createChat,
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(14.dp),
+                            border = BorderStroke(1.dp, HomeForestGreen.copy(alpha = 0.38f)),
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                contentColor = HomeForestGreen,
+                            ),
+                        ) {
+                            Text(
+                                "Ask Gluci",
+                                style = MaterialTheme.typography.labelLarge,
+                                modifier = Modifier.padding(vertical = 6.dp),
+                            )
+                        }
+                    }
+                }
+
+                // Stats tiles
+                item {
+                    val streak = computeStreak(weekDailyBars)
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        StatTile(
+                            modifier = Modifier.weight(1f),
+                            value = if (summariesLoading) "—" else "${daily?.checks ?: 0}",
+                            label = "checks",
                         )
-                        Text(
-                            "Start a new chat or open one below — meal, restaurant, and grocery in any thread.",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(top = 4.dp),
+                        StatTile(
+                            modifier = Modifier.weight(1f),
+                            value = if (summariesLoading) "—" else daily?.averageScore?.let { "%.1f".format(it) } ?: "—",
+                            label = "avg",
+                            highlight = true,
+                        )
+                        StatTile(
+                            modifier = Modifier.weight(1f),
+                            value = "${streak}d",
+                            label = "streak",
                         )
                     }
                 }
+
+                // Glucose week chart
+                item {
+                    GlucoseWeekSection(
+                        bars = weekDailyBars,
+                        loading = summariesLoading,
+                    )
+                }
+
+                // Daily + weekly summaries
                 item {
                     HomeSummariesSection(
                         loading = summariesLoading,
@@ -134,20 +211,15 @@ fun HomeScreen(
                         weekly = weekly,
                     )
                 }
-                item {
-                    GlucoseWeekSection(
-                        bars = weekDailyBars,
-                        loading = summariesLoading,
-                        modifier = Modifier.padding(top = 4.dp),
-                    )
-                }
+
+                // Recent conversations
                 if (convs.isNotEmpty()) {
                     item {
                         Text(
-                            "Recent chats",
+                            "Recent",
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(top = 10.dp, bottom = 2.dp),
+                            modifier = Modifier.padding(top = 6.dp, bottom = 2.dp),
                         )
                     }
                     items(convs, key = { it.id }) { c ->
@@ -160,10 +232,10 @@ fun HomeScreen(
                 } else {
                     item {
                         Text(
-                            "No threads yet — tap + to start.",
+                            "No threads yet — tap Snap a meal to start.",
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(top = 16.dp),
+                            modifier = Modifier.padding(top = 8.dp),
                         )
                     }
                 }
@@ -177,7 +249,6 @@ private fun HomeTopBar(
     usage: Pair<Int, Int>?,
     billing: BillingStatusResponse?,
     onUpgrade: () -> Unit,
-    onNewChat: () -> Unit,
     onSettings: () -> Unit,
 ) {
     val isActive = billing?.subscriptionStatus == "active"
@@ -185,36 +256,27 @@ private fun HomeTopBar(
         modifier = Modifier
             .fillMaxWidth()
             .statusBarsPadding(),
-        color = Color.White.copy(alpha = 0.88f),
-        shadowElevation = 2.dp,
+        color = Color.White.copy(alpha = 0.92f),
+        shadowElevation = 1.dp,
         tonalElevation = 0.dp,
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .heightIn(min = 56.dp)
-                .padding(horizontal = 12.dp, vertical = 8.dp),
+                .padding(horizontal = 16.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Column(
-                Modifier
-                    .weight(1f)
-                    .padding(end = 8.dp),
-            ) {
+            Column(Modifier.weight(1f)) {
                 Text(
-                    "Gluci",
-                    style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
-                    color = HomeSageMuted,
+                    "Today",
+                    style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold),
+                    color = MaterialTheme.colorScheme.onBackground,
                 )
-                when {
-                    isActive -> Text(
-                        "Pro",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    else -> usage?.let { (used, limit) ->
+                if (!isActive) {
+                    usage?.let { (used, limit) ->
                         Text(
-                            "Free checks $used / $limit",
+                            "$used / $limit free checks",
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -223,41 +285,81 @@ private fun HomeTopBar(
             }
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.End,
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
             ) {
-                if (!isActive && billing?.stripeConfigured == true) {
-                    TextButton(onClick = onUpgrade) {
+                if (isActive) {
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(HomeForestGreen.copy(alpha = 0.12f))
+                            .padding(horizontal = 10.dp, vertical = 5.dp),
+                    ) {
+                        Text(
+                            "Pro",
+                            style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
+                            color = HomeForestGreen,
+                        )
+                    }
+                    Spacer(Modifier.width(4.dp))
+                } else if (billing?.stripeConfigured == true) {
+                    TextButton(
+                        onClick = onUpgrade,
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                    ) {
                         Text(
                             "Upgrade",
                             style = MaterialTheme.typography.labelLarge,
-                            color = MaterialTheme.colorScheme.primary,
+                            color = HomeForestGreen,
                         )
                     }
                 }
                 IconButton(
-                    onClick = onNewChat,
-                    modifier = Modifier.size(48.dp),
-                ) {
-                    Icon(
-                        Icons.Outlined.Add,
-                        contentDescription = "New chat",
-                        tint = HomeSageMuted,
-                        modifier = Modifier.size(26.dp),
-                    )
-                }
-                IconButton(
                     onClick = onSettings,
-                    modifier = Modifier.size(48.dp),
+                    modifier = Modifier.size(40.dp),
                 ) {
                     Icon(
                         Icons.Outlined.Settings,
                         contentDescription = "Settings",
                         tint = HomeSageMuted,
-                        modifier = Modifier.size(24.dp),
+                        modifier = Modifier.size(22.dp),
                     )
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun StatTile(
+    modifier: Modifier = Modifier,
+    value: String,
+    label: String,
+    highlight: Boolean = false,
+) {
+    val outline = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)
+    Column(
+        modifier = modifier
+            .clip(StatCardShape)
+            .background(Color(0xFFFDFDFC))
+            .border(1.dp, outline, StatCardShape)
+            .padding(horizontal = 10.dp, vertical = 14.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
+    ) {
+        Text(
+            text = value,
+            style = MaterialTheme.typography.headlineSmall.copy(
+                fontWeight = FontWeight.Bold,
+                fontSize = 26.sp,
+            ),
+            color = if (highlight) HomeForestGreen else MaterialTheme.colorScheme.onSurface,
+        )
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(top = 2.dp),
+        )
     }
 }
 
@@ -267,16 +369,15 @@ private fun HomeChatRow(
     onClick: () -> Unit,
     onDelete: () -> Unit,
 ) {
-    val outline = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)
-    val cardFill = Color(0xFFFDFDFC)
+    val outline = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .heightIn(min = 54.dp)
+            .heightIn(min = 50.dp)
             .clip(ChatCardShape)
-            .background(cardFill)
-            .border(width = 1.dp, color = outline, shape = ChatCardShape)
-            .padding(horizontal = 4.dp, vertical = 4.dp),
+            .background(Color(0xFFFDFDFC))
+            .border(1.dp, outline, ChatCardShape)
+            .padding(horizontal = 4.dp, vertical = 2.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Row(
@@ -284,32 +385,27 @@ private fun HomeChatRow(
                 .weight(1f)
                 .clip(ChatCardShape)
                 .clickable(onClick = onClick)
-                .padding(horizontal = 12.dp, vertical = 10.dp),
+                .padding(horizontal = 14.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(
                 text = title,
-                style = MaterialTheme.typography.bodyLarge.copy(background = Color.Unspecified),
+                style = MaterialTheme.typography.bodyLarge,
                 color = MaterialTheme.colorScheme.onSurface,
-                maxLines = 2,
+                maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f),
             )
-            Text(
-                text = "›",
-                style = MaterialTheme.typography.titleMedium.copy(
-                    fontWeight = FontWeight.Medium,
-                    background = Color.Unspecified,
-                ),
-                color = HomeSageMuted.copy(alpha = 0.5f),
-                modifier = Modifier.padding(start = 10.dp),
-            )
         }
-        IconButton(onClick = onDelete) {
+        IconButton(
+            onClick = onDelete,
+            modifier = Modifier.size(40.dp),
+        ) {
             Icon(
                 Icons.Outlined.Delete,
                 contentDescription = "Delete chat",
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                modifier = Modifier.size(18.dp),
             )
         }
     }
@@ -400,14 +496,13 @@ private fun SummaryCard(
     title: String,
     body: String,
 ) {
-    val outline = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)
-    val cardFill = Color(0xFFF8F9F8)
+    val outline = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .clip(ShortcutCardShape)
-            .background(cardFill)
-            .border(width = 1.dp, color = outline, shape = ShortcutCardShape)
+            .background(Color(0xFFFDFDFC))
+            .border(1.dp, outline, ShortcutCardShape)
             .padding(horizontal = 16.dp, vertical = 14.dp),
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
@@ -415,7 +510,7 @@ private fun SummaryCard(
             imageVector = icon,
             contentDescription = null,
             tint = HomeSageMuted,
-            modifier = Modifier.size(22.dp),
+            modifier = Modifier.size(20.dp),
         )
         Column(Modifier.weight(1f)) {
             Text(
@@ -423,7 +518,7 @@ private fun SummaryCard(
                 style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
                 color = MaterialTheme.colorScheme.primary,
             )
-            Spacer(Modifier.height(6.dp))
+            Spacer(Modifier.height(5.dp))
             Text(
                 body,
                 style = MaterialTheme.typography.bodySmall,

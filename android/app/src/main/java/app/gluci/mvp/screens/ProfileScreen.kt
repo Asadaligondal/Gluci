@@ -64,6 +64,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import app.gluci.mvp.BuildConfig
 import app.gluci.mvp.vm.GluciViewModel
@@ -71,6 +72,7 @@ import app.gluci.mvp.vm.GluciViewModel
 private val SageGradientStart = Color(0xFF42655B)
 private val SageGradientMid = Color(0xFF5A756C)
 private val SageGradientEnd = Color(0xFF769A8F)
+private val PlanGreen = Color(0xFF2D5A4B)
 
 private val SettingsCardShape = RoundedCornerShape(20.dp)
 private val SettingsCardFill = Color(0xFFF8F9F8)
@@ -253,110 +255,147 @@ private fun SubscriptionHeroCard(
     onUpgrade: () -> Unit,
     onManage: () -> Unit,
 ) {
-    val gradient = Brush.linearGradient(
-        colors = listOf(SageGradientStart, SageGradientMid, SageGradientEnd),
-    )
-    val heroShape = RoundedCornerShape(20.dp)
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(heroShape)
-            .background(gradient)
-            .padding(horizontal = 20.dp, vertical = 20.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp),
-    ) {
-        Row(
-            Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
+    if (!isActive) {
+        // Free user — plan card style matching paywall
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(16.dp))
+                .border(BorderStroke(1.5.dp, PlanGreen), RoundedCornerShape(16.dp))
+                .padding(18.dp),
+            verticalArrangement = Arrangement.spacedBy(0.dp),
         ) {
             Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                modifier = Modifier
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(Color.White.copy(alpha = 0.16f))
-                    .border(BorderStroke(1.dp, Color.White.copy(alpha = 0.35f)), RoundedCornerShape(8.dp))
-                    .padding(horizontal = 10.dp, vertical = 6.dp),
             ) {
                 Text(
-                    "CURRENT PLAN",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = Color.White,
+                    "Gluci Pro",
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                    color = MaterialTheme.colorScheme.onBackground,
+                )
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(PlanGreen.copy(alpha = 0.10f))
+                        .padding(horizontal = 8.dp, vertical = 4.dp),
+                ) {
+                    Text(
+                        "3 days free",
+                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
+                        color = PlanGreen,
+                    )
+                }
+            }
+            Spacer(Modifier.height(10.dp))
+            Row(verticalAlignment = Alignment.Bottom) {
+                Text(
+                    "$39.99",
+                    style = MaterialTheme.typography.headlineLarge.copy(
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 34.sp,
+                    ),
+                    color = MaterialTheme.colorScheme.onBackground,
+                )
+                Text(
+                    " /year",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(bottom = 5.dp),
                 )
             }
-            Icon(
-                imageVector = Icons.Filled.CheckCircle,
-                contentDescription = null,
-                tint = Color.White.copy(alpha = 0.95f),
-                modifier = Modifier.size(26.dp),
-            )
-        }
-        Text(
-            text = if (isActive) "Gluci Pro" else "Gluci Free",
-            style = MaterialTheme.typography.headlineSmall.copy(
-                fontWeight = FontWeight.Bold,
-                color = Color.White,
-            ),
-        )
-        Text(
-            text = if (isActive) {
-                "Advanced guidance and higher usage limits on your plan."
-            } else {
-                "Free checks: $freeUsed / $freeLimit · upgrade anytime for unlimited scanning and insights."
-            },
-            style = MaterialTheme.typography.bodyMedium,
-            color = Color.White.copy(alpha = 0.92f),
-        )
-        renewsText?.takeIf { isActive }?.let { end ->
+            Spacer(Modifier.height(6.dp))
             Text(
-                text = buildString {
-                    append("Renews on $end")
-                    if (cancelAtPeriodEnd == true) append(" · cancels at period end")
-                },
-                style = MaterialTheme.typography.labelMedium,
-                color = Color.White.copy(alpha = 0.78f),
+                "Free checks used: $freeUsed / $freeLimit",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+            Spacer(Modifier.height(4.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                listOf("Unlimited checks", "History", "Share cards").forEach {
+                    Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+            Spacer(Modifier.height(16.dp))
+            if (!billingLoaded) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp, color = PlanGreen)
+                    Text("Loading…", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            } else {
+                Button(
+                    onClick = onUpgrade,
+                    enabled = !busy,
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(999.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = PlanGreen,
+                        contentColor = Color.White,
+                        disabledContainerColor = PlanGreen.copy(alpha = 0.35f),
+                    ),
+                ) {
+                    Text(
+                        "Upgrade to Pro",
+                        style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold),
+                        modifier = Modifier.padding(vertical = 8.dp),
+                    )
+                }
+            }
         }
-        if (!billingLoaded) {
+    } else {
+        // Active — gradient card
+        val gradient = Brush.linearGradient(colors = listOf(SageGradientStart, SageGradientMid, SageGradientEnd))
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(20.dp))
+                .background(gradient)
+                .padding(horizontal = 20.dp, vertical = 20.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
             Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                CircularProgressIndicator(
-                    modifier = Modifier.size(18.dp),
-                    strokeWidth = 2.dp,
+                Text(
+                    "Gluci Pro",
+                    style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold),
                     color = Color.White,
                 )
-                Text(
-                    "Loading plan…",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = Color.White.copy(alpha = 0.85f),
+                Icon(
+                    imageVector = Icons.Filled.CheckCircle,
+                    contentDescription = null,
+                    tint = Color.White.copy(alpha = 0.9f),
+                    modifier = Modifier.size(24.dp),
                 )
             }
-        }
-        Spacer(Modifier.height(4.dp))
-        if (!isActive) {
-            Button(
-                onClick = onUpgrade,
-                enabled = !busy && billingLoaded,
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(999.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = Color.White,
-                    contentColor = SageGradientStart,
-                    disabledContainerColor = Color.White.copy(alpha = 0.65f),
-                    disabledContentColor = SageGradientStart.copy(alpha = 0.55f),
-                ),
-                elevation = ButtonDefaults.buttonElevation(defaultElevation = 0.dp),
-            ) {
+            Text(
+                "Advanced guidance and higher usage limits on your plan.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = Color.White.copy(alpha = 0.92f),
+            )
+            renewsText?.let { end ->
                 Text(
-                    "Upgrade",
-                    style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold),
-                    modifier = Modifier.padding(vertical = 8.dp),
+                    buildString {
+                        append("Renews on $end")
+                        if (cancelAtPeriodEnd == true) append(" · cancels at period end")
+                    },
+                    style = MaterialTheme.typography.labelMedium,
+                    color = Color.White.copy(alpha = 0.75f),
                 )
             }
-        } else {
+            if (!billingLoaded) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp, color = Color.White)
+                    Text("Loading plan…", style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = 0.85f))
+                }
+            }
+            Spacer(Modifier.height(2.dp))
             Button(
                 onClick = onManage,
                 enabled = !busy && billingLoaded,
@@ -365,8 +404,8 @@ private fun SubscriptionHeroCard(
                 colors = ButtonDefaults.buttonColors(
                     containerColor = Color.White,
                     contentColor = SageGradientStart,
-                    disabledContainerColor = Color.White.copy(alpha = 0.65f),
-                    disabledContentColor = SageGradientStart.copy(alpha = 0.55f),
+                    disabledContainerColor = Color.White.copy(alpha = 0.6f),
+                    disabledContentColor = SageGradientStart.copy(alpha = 0.5f),
                 ),
                 elevation = ButtonDefaults.buttonElevation(defaultElevation = 0.dp),
             ) {
