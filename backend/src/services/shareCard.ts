@@ -196,22 +196,41 @@ function buildAndroidCardSVG(params: {
   const curvePts: Pt[] = [];
   let peakX = cLeft + cW * 0.5, peakY = cTop + cTopPad + cDrawH * 0.1;
   let peakMin = 60;
+  let xMax = 120;
+  let scaleCeiling = 100;
 
   if (glucoseCurve.length >= 2) {
     const sorted = [...glucoseCurve].sort((a, b) => a.minute - b.minute);
     const actualMax = Math.max(...sorted.map((p) => p.mg_dl));
-    const scaleCeiling = Math.max(actualMax * 1.15, 20);
-    for (const pt of sorted) {
+    // Match Android: (peak*1.5).coerceIn(45, max(100, peak*1.15))
+    scaleCeiling = Math.min(Math.max(actualMax * 1.5, 45), Math.max(100, actualMax * 1.15));
+    // Match Android dynamic x-axis: trim to where curve returns near baseline
+    const threshold = Math.max(actualMax * 0.1, 5);
+    const lastMin = sorted.filter((p) => p.mg_dl >= threshold).slice(-1)[0]?.minute ?? 120;
+    xMax = Math.min(180, Math.max(90, Math.ceil((lastMin + 29) / 30) * 30));
+    for (const pt of sorted.filter((p) => p.minute <= xMax)) {
       curvePts.push({
-        x: cLeft + (pt.minute / 180) * cW,
+        x: cLeft + (pt.minute / xMax) * cW,
         y: axisY - (pt.mg_dl / scaleCeiling) * cDrawH,
       });
     }
     const peakRaw = glucoseCurve.reduce((b, p) => (p.mg_dl > b.mg_dl ? p : b), glucoseCurve[0]);
     peakMin = peakRaw.minute;
-    peakX = cLeft + (peakRaw.minute / 180) * cW;
+    peakX = cLeft + (peakRaw.minute / xMax) * cW;
     peakY = axisY - (peakRaw.mg_dl / scaleCeiling) * cDrawH;
   }
+
+  // Green "normal" dashed reference line at 20 mg/dL + dynamic Y-axis labels (matches Android)
+  const refY = axisY - (20 / scaleCeiling) * cDrawH;
+  const labelStep = Math.max(Math.floor((scaleCeiling / 2) / 5) * 5, 5);
+  const yLabelVals = [0, labelStep, labelStep * 2].filter((v) => v <= scaleCeiling);
+  const yLabelsSvg = yLabelVals
+    .map((mgDl) => {
+      const yPos = axisY - (mgDl / scaleCeiling) * cDrawH;
+      const textY = Math.max(yPos + 6, cTop + 16);
+      return `<text x="${cLeft + 4}" y="${textY.toFixed(1)}" font-family="Arial,sans-serif" font-size="20" fill="#888888">${mgDl}</text>`;
+    })
+    .join("\n  ");
 
   const fillD = catmullRomPath(curvePts, axisY);
   const strokeD = catmullRomPath(curvePts);
@@ -257,6 +276,9 @@ function buildAndroidCardSVG(params: {
   ${fillD ? `<path d="${fillD}" fill="#5C6BC0" fill-opacity="0.10" clip-path="url(#chartClip)"/>` : ""}
   ${strokeD ? `<path d="${strokeD}" fill="none" stroke="#5C6BC0" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" clip-path="url(#chartClip)"/>` : ""}
   ${curvePts.length >= 2 ? `
+  <line x1="${cLeft}" y1="${refY.toFixed(1)}" x2="${cRight}" y2="${refY.toFixed(1)}" stroke="#43A047" stroke-opacity="0.5" stroke-width="1.5" stroke-dasharray="9,6" clip-path="url(#chartClip)"/>
+  <text x="${cRight - 4}" y="${(refY - 5).toFixed(1)}" font-family="Arial,sans-serif" font-size="18" fill="#43A047" fill-opacity="0.8" text-anchor="end">normal</text>
+  ${yLabelsSvg}
   <line x1="${peakX.toFixed(1)}" y1="${(peakY + 8).toFixed(1)}" x2="${peakX.toFixed(1)}" y2="${axisY}" stroke="#5C6BC0" stroke-opacity="0.45" stroke-width="2" stroke-dasharray="10,6"/>
   <circle cx="${peakX.toFixed(1)}" cy="${peakY.toFixed(1)}" r="9" fill="white"/>
   <circle cx="${peakX.toFixed(1)}" cy="${peakY.toFixed(1)}" r="6" fill="#5C6BC0"/>` : ""}
@@ -264,8 +286,8 @@ function buildAndroidCardSVG(params: {
   <text x="${cLeft}" y="${xL2}" font-family="Arial,sans-serif" font-size="22" fill="#999999">Meal</text>
   <text x="${peakX.toFixed(1)}" y="${xL1}" font-family="Arial,sans-serif" font-size="24" font-weight="500" fill="#666666" text-anchor="middle">+${peakMin}m</text>
   <text x="${peakX.toFixed(1)}" y="${xL2}" font-family="Arial,sans-serif" font-size="22" fill="#5C6BC0" font-weight="600" text-anchor="middle">Peak</text>
-  <text x="${cRight}" y="${xL1}" font-family="Arial,sans-serif" font-size="24" font-weight="500" fill="#666666" text-anchor="end">+120m</text>
-  <text x="${cRight}" y="${xL2}" font-family="Arial,sans-serif" font-size="22" fill="#999999" text-anchor="end">Return</text>
+  <text x="${cRight}" y="${xL1}" font-family="Arial,sans-serif" font-size="24" font-weight="500" fill="#666666" text-anchor="end">+${xMax}m</text>
+  <text x="${cRight}" y="${xL2}" font-family="Arial,sans-serif" font-size="22" fill="#999999" text-anchor="end">~Done</text>
   <text x="${cRight}" y="${(xL2 + 26)}" font-family="Arial,sans-serif" font-size="20" fill="#BBBBBB" text-anchor="end">Time →</text>
 
   ${hasTip ? `<!-- ─ Tip card ─ -->
@@ -283,7 +305,7 @@ function buildAndroidCardSVG(params: {
 export async function renderShareCard(params: {
   score: number;
   verdict: string;
-  insight: string;
+  tip: string;
   subtitle?: string;
   heroImagePath?: string;
   heroImageUrl?: string;
@@ -300,7 +322,7 @@ export async function renderShareCard(params: {
     foodName: (params.foodName ?? "Your meal").trim() || "Your meal",
     score: params.score,
     verdict: params.verdict,
-    tip: params.insight,
+    tip: params.tip,
     glucoseCurve: params.glucoseCurve ?? [],
     imageDataUri,
     subtitle: params.subtitle ?? "gluci.app",

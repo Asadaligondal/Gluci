@@ -682,6 +682,44 @@ Respond in JSON only:
   }
 }
 
+export async function generateCurveTips(params: {
+  foodName: string;
+  score: number;
+  peakMgDl: number;
+  peakMinute: number;
+  verdict: string;
+}): Promise<[string, string]> {
+  const client = getOpenAIClient();
+  try {
+    const completion = await client.chat.completions.create({
+      model: "gpt-4o-mini",
+      max_tokens: 200,
+      temperature: 0.7,
+      response_format: { type: "json_object" },
+      messages: [
+        {
+          role: "system",
+          content: `You are a glucose science coach. Return exactly 2 short, specific, actionable tips to flatten the glucose spike for this meal. Each tip must be one concrete sentence with an approximate percentage benefit (e.g. "Eat the salad before your pasta — flattens the spike by ~25–30%"). Be specific to the actual meal. Return ONLY: {"tips": ["tip1", "tip2"]}`,
+        },
+        {
+          role: "user",
+          content: `Meal: ${params.foodName}\nScore: ${params.score}/10\nVerdict: ${params.verdict}\nPeak: +${Math.round(params.peakMgDl)} mg/dL at ${params.peakMinute} min`,
+        },
+      ],
+    });
+    const raw = JSON.parse(completion.choices[0]?.message?.content ?? "{}") as { tips?: string[] };
+    if (Array.isArray(raw.tips) && raw.tips.length >= 2 && typeof raw.tips[0] === "string" && typeof raw.tips[1] === "string") {
+      return [raw.tips[0].trim(), raw.tips[1].trim()];
+    }
+  } catch {
+    /* fall through to defaults */
+  }
+  return [
+    "Eat vegetables or salad before the main dish — this can reduce the glucose spike by 20–30%.",
+    "A 10-minute walk after your meal helps muscles absorb glucose and flattens the curve by ~15%.",
+  ];
+}
+
 export async function runGluciTurn(params: {
   userText: string;
   imageBase64?: string;

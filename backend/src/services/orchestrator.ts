@@ -634,7 +634,7 @@ export async function handleChatTurn(params: {
     const card = await renderShareCard({
       score: structured.glucoseGalScore,
       verdict: structured.verdict,
-      insight: structured.userReply.slice(0, 400),
+      tip: structured.tip?.trim() ?? "",
       subtitle: `Join Gluci: ${shareLandingUrl}`,
       heroImagePath: heroAbs,
       heroImageUrl: heroUrl ?? (!heroAbs ? productImageUrl : undefined),
