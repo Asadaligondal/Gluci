@@ -50,14 +50,25 @@ internalRouter.get("/cron/reengage", async (req, res) => {
       }
 
       if (u.whatsappWaId) {
-        await sendWhatsAppMessage(u.whatsappWaId, msg);
-        void logAnalytics({
-          userId: u.id,
-          name: "reengagement_sent",
-          properties: { channel: "whatsapp" },
-          source: "server",
-        });
-        sent = true;
+        const allowedRaw = process.env.WHATSAPP_ALLOWED_RECIPIENTS;
+        const allowedSet = allowedRaw ? new Set(allowedRaw.split(",").map((s) => s.trim())) : null;
+        if (allowedSet && !allowedSet.has(u.whatsappWaId)) {
+          console.log(`[WA-CRON] skipped (not in sandbox allowlist): ${u.whatsappWaId}`);
+        } else {
+          try {
+            await sendWhatsAppMessage(u.whatsappWaId, msg);
+            void logAnalytics({
+              userId: u.id,
+              name: "reengagement_sent",
+              properties: { channel: "whatsapp" },
+              source: "server",
+            });
+            sent = true;
+          } catch (e) {
+            console.log(`[WA-CRON] send failed to=${u.whatsappWaId}`);
+            lines.push(`fail-wa:${u.id}:${String(e)}`);
+          }
+        }
       }
 
       if (u.fcmToken) {

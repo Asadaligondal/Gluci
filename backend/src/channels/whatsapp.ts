@@ -34,7 +34,7 @@ async function waSendText(to: string, body: string) {
   const phoneId = cfg.WHATSAPP_PHONE_NUMBER_ID;
   if (!token || !phoneId) throw new Error("WhatsApp not configured");
 
-  const url = `https://graph.facebook.com/v21.0/${phoneId}/messages`;
+  const url = `https://graph.facebook.com/v25.0/${phoneId}/messages`;
   const res = await fetch(url, {
     method: "POST",
     headers: {
@@ -50,8 +50,9 @@ async function waSendText(to: string, body: string) {
   });
   if (!res.ok) {
     const t = await res.text();
-    throw new Error(`WhatsApp send: ${res.status} ${t}`);
+    throw new Error(`WhatsApp send to=${to} url=${url}: ${res.status} ${t}`);
   }
+  console.log(`[WA] sent to=${to} status=${res.status}`);
 }
 
 async function waSendImage(to: string, imageUrl: string, caption: string) {
@@ -60,8 +61,8 @@ async function waSendImage(to: string, imageUrl: string, caption: string) {
   const phoneId = cfg.WHATSAPP_PHONE_NUMBER_ID;
   if (!token || !phoneId) return;
 
-  const url = `https://graph.facebook.com/v21.0/${phoneId}/messages`;
-  await fetch(url, {
+  const url = `https://graph.facebook.com/v25.0/${phoneId}/messages`;
+  const res = await fetch(url, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${token}`,
@@ -74,6 +75,11 @@ async function waSendImage(to: string, imageUrl: string, caption: string) {
       image: { link: imageUrl, caption: caption.slice(0, 1024) },
     }),
   });
+  if (!res.ok) {
+    const t = await res.text();
+    throw new Error(`WhatsApp send to=${to} url=${url}: ${res.status} ${t}`);
+  }
+  console.log(`[WA] sent to=${to} status=${res.status}`);
 }
 
 async function waDownloadMedia(mediaId: string): Promise<{ base64: string; mime: string } | null> {
