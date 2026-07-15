@@ -10,8 +10,8 @@ const envSchema = z.object({
   FREE_DECISIONS_LIMIT: z.coerce.number().default(50),
   TELEGRAM_BOT_TOKEN: z.string().optional(),
   TELEGRAM_BOT_USERNAME: z.string().optional(),
-  WHATSAPP_VERIFY_TOKEN: z.string().optional(),
-  WHATSAPP_ACCESS_TOKEN: z.string().optional(),
+  WHATSAPP_VERIFY_TOKEN: z.string().trim().optional(),
+  WHATSAPP_ACCESS_TOKEN: z.string().trim().optional(),
   WHATSAPP_PHONE_NUMBER_ID: z.string().optional(),
   STRIPE_SECRET_KEY: z.string().optional(),
   STRIPE_WEBHOOK_SECRET: z.string().optional(),
@@ -32,6 +32,8 @@ const envSchema = z.object({
 export type Config = z.infer<typeof envSchema>;
 
 export function loadConfig(): Config {
+  const t = process.env.WHATSAPP_ACCESS_TOKEN || "";
+  console.log(`[CFG] WA token len=${t.length} head=${t.slice(0, 6)} tail=${t.slice(-6)} clean=${/^[A-Za-z0-9]+$/.test(t)}`);
   const parsed = envSchema.safeParse(process.env);
   if (!parsed.success) {
     console.error(parsed.error.flatten().fieldErrors);
