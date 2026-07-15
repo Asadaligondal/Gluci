@@ -29,6 +29,11 @@ app.use(
   }),
 );
 
+app.use((req, _res, next) => {
+  console.log(`[REQ] ${req.method} ${req.originalUrl}`);
+  next();
+});
+
 app.post(
   "/webhooks/stripe",
   express.raw({ type: "application/json" }),

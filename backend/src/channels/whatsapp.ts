@@ -105,6 +105,7 @@ export function verifyWhatsApp(mode: string | undefined, token: string | undefin
 }
 
 export async function handleWhatsAppPayload(body: Record<string, unknown>) {
+  console.log("[WA-WEBHOOK] received:", JSON.stringify(body).slice(0, 500));
   const entry = (body.entry as Record<string, unknown>[] | undefined)?.[0];
   const changes = (entry?.changes as Record<string, unknown>[] | undefined)?.[0];
   const value = changes?.value as Record<string, unknown> | undefined;
